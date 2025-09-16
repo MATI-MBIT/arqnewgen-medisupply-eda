@@ -88,12 +88,6 @@ endif
 		kubectl wait --for=condition=available --timeout=300s deployment/jaeger -n istio-system; \
 		kubectl wait --for=condition=available --timeout=300s deployment/grafana -n istio-system; \
 		kubectl wait --for=condition=available --timeout=300s deployment/kiali -n istio-system; \
-	
-	@echo "🔧 Desplegando observability..."
-	@kubectl create namespace medisupply --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace medisupply ya existe o fue creado"
-	@helm upgrade --install observability ./observability \
-	    --debug \
-		--wait
 
 	@echo "🌐 Desplegando Istio Gateway..."
 	@helm upgrade --install istio-gateway ./istio/gateway --debug \
