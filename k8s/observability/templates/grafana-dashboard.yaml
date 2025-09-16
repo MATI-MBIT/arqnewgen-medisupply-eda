@@ -1,0 +1,88 @@
+{{- if .Values.grafana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.grafana.dashboard.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  medisupply-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "{{ .Values.grafana.dashboard.title }}",
+        "tags": {{ .Values.grafana.dashboard.tags | toJson }},
+        "style": "{{ .Values.grafana.dashboard.style }}",
+        "timezone": "{{ .Values.grafana.dashboard.timezone }}",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{destination_service_namespace=\"{{ .Values.global.medisupplyNamespace }}\"}[1m])) by (destination_service_name)",
+                "legendFormat": "{{`{{destination_service_name}}`}}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Requests/sec"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 0
+            }
+          },
+          {
+            "id": 2,
+            "title": "Success Rate",
+            "type": "singlestat",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{destination_service_namespace=\"{{ .Values.global.medisupplyNamespace }}\",response_code!~\"5.*\"}[1m])) / sum(rate(istio_requests_total{destination_service_namespace=\"{{ .Values.global.medisupplyNamespace }}\"}[1m])) * 100"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 0
+            }
+          },
+          {
+            "id": 3,
+            "title": "Response Time P99",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.99, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_namespace=\"{{ .Values.global.medisupplyNamespace }}\"}[1m])) by (destination_service_name, le))",
+                "legendFormat": "{{`{{destination_service_name}}`}}"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Milliseconds"
+              }
+            ],
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 8
+            }
+          }
+        ],
+        "time": {
+          "from": "{{ .Values.grafana.dashboard.timeRange.from }}",
+          "to": "{{ .Values.grafana.dashboard.timeRange.to }}"
+        },
+        "refresh": "{{ .Values.grafana.dashboard.refresh }}"
+      }
+    }
+{{- end }}

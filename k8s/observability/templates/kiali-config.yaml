@@ -1,0 +1,121 @@
+{{- if .Values.kiali.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kiali
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    auth:
+      openid: {}
+      openshift:
+        client_id_prefix: kiali
+      strategy: {{ .Values.kiali.auth.strategy }}
+    deployment:
+      accessible_namespaces:
+      - '**'
+      additional_service_yaml: {}
+      affinity:
+        node: {}
+        pod: {}
+        pod_anti: {}
+      configmap_annotations: {}
+      custom_secrets: []
+      host_aliases: []
+      hpa:
+        api_version: autoscaling/v2beta2
+        spec: {}
+      image_digest: ""
+      image_name: {{ .Values.kiali.image }}
+      image_pull_policy: Always
+      image_pull_secrets: []
+      image_version: {{ .Values.kiali.version }}
+      ingress:
+        additional_labels: {}
+        class_name: nginx
+        override_yaml:
+          metadata: {}
+      ingress_enabled: false
+      instance_name: kiali
+      logger:
+        log_format: text
+        log_level: info
+        sampler_rate: "1"
+        time_field_format: 2006-01-02T15:04:05Z07:00
+      namespace: {{ .Values.global.namespace }}
+      node_selector: {}
+      pod_annotations: {}
+      pod_labels:
+        sidecar.istio.io/inject: "false"
+      priority_class_name: ""
+      replicas: 1
+      resources:
+        limits:
+          memory: {{ .Values.kiali.resources.limits.memory }}
+        requests:
+          cpu: {{ .Values.kiali.resources.requests.cpu }}
+          memory: {{ .Values.kiali.resources.requests.memory }}
+      secret_name: kiali
+      security_context: {}
+      service_annotations: {}
+      service_type: ""
+      tolerations: []
+      version_label: {{ .Values.kiali.version }}.0
+      view_only_mode: false
+    external_services:
+      custom_dashboards:
+        enabled: true
+      grafana:
+        enabled: {{ .Values.kiali.externalServices.grafana.enabled }}
+        in_cluster_url: '{{ .Values.kiali.externalServices.grafana.inClusterUrl }}'
+        url: '{{ .Values.kiali.externalServices.grafana.url }}'
+        dashboards:
+        - name: "Istio Service Dashboard"
+          variables:
+            namespace: "var-namespace"
+            service: "var-service"
+        - name: "Istio Workload Dashboard"
+          variables:
+            namespace: "var-namespace"
+            workload: "var-workload"
+        - name: "Istio Mesh Dashboard"
+      prometheus:
+        url: "{{ .Values.kiali.externalServices.prometheus.url }}"
+      tracing:
+        enabled: {{ .Values.kiali.externalServices.tracing.enabled }}
+        in_cluster_url: '{{ .Values.kiali.externalServices.tracing.inClusterUrl }}'
+        internal_url: '{{ .Values.kiali.externalServices.tracing.inClusterUrl }}'
+        external_url: "{{ .Values.kiali.externalServices.tracing.externalUrl }}"
+        url: '{{ .Values.kiali.externalServices.tracing.externalUrl }}'
+        use_grpc: false
+      istio:
+        root_namespace: {{ .Values.global.namespace }}
+    identity:
+      cert_file: ""
+      private_key_file: ""
+    istio_namespace: {{ .Values.global.namespace }}
+    kiali_feature_flags:
+      certificates_information_indicators:
+        enabled: true
+        secrets:
+        - cacerts
+        - istio-ca-secret
+      clustering:
+        autodetect_secrets:
+          enabled: true
+          label: kiali.io/multiCluster=true
+        clusters: []
+      disabled_features: []
+      validations:
+        ignore:
+        - KIA1301
+    login_token:
+      signing_key: CHANGEME00000000
+    server:
+      metrics_enabled: true
+      metrics_port: 9090
+      port: 20001
+      web_root: /kiali
+{{- end }}
