@@ -1,0 +1,7 @@
+apiVersion: v2
+appVersion: 5.8.8
+description: A Helm chart for EMQX
+icon: https://github.com/emqx.png
+name: emqx
+type: application
+version: 5.8.8

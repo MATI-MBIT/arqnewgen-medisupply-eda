@@ -5,15 +5,17 @@ CLUSTER_NAME := local-k8s
 KUBECONFIG_PATH := ~/.kube/config
 PROVIDER := $(or $(PROVIDER),kind)
 
-.PHONY: help init deploy clean destroy kiali kafka-ui
+.PHONY: help init deploy clean destroy kiali kafka-ui emqx rabbitmq
 
 help: ## Mostrar ayuda
 	@echo "Comandos disponibles:"
 	@echo "  init PROVIDER=kind     - Crear cluster local con Kind (default)"
 	@echo "  init PROVIDER=minikube - Crear cluster local con Minikube"
-	@echo "  deploy                 - Desplegar charts istio, gateway y keda"
+	@echo "  deploy                 - Desplegar Kafka, Kafka UI, MQTT y RabbitMQ"
 	@echo "  kiali                  - Abrir Kiali dashboard (requiere Istio)"
 	@echo "  kafka-ui               - Abrir Kafka UI dashboard"
+	@echo "  emqx                   - Abrir EMQX dashboard"
+	@echo "  rabbitmq               - Abrir RabbitMQ Management UI"
 	@echo "  clean                  - Eliminar charts del cluster"
 	@echo "  destroy                - Eliminar cluster completamente"
 	@echo ""
@@ -23,6 +25,8 @@ help: ## Mostrar ayuda
 	@echo "  make init PROVIDER=minikube"
 	@echo "  make kiali             # Abrir Kiali dashboard"
 	@echo "  make kafka-ui          # Abrir Kafka UI dashboard"
+	@echo "  make emqx              # Abrir EMQX dashboard"
+	@echo "  make rabbitmq          # Abrir RabbitMQ Management UI"
 
 init: ## Crear cluster local con Kind o Minikube
 	@echo "🚀 Creando cluster local con $(PROVIDER)..."
@@ -110,16 +114,30 @@ deploy:
 	@echo "⚡ Desplegando Kafka..."
 	@helm upgrade --install kafka ./kafka \
 		--namespace medisupply \
+		--values ./config/kafka-values.yaml \
 		--wait
-## 	--values ./config/kafka-values.yaml \
 
 	@echo "🖥️  Desplegando Kafka UI..."
 	@helm upgrade --install kafka-ui ./kafka-ui \
 		--namespace medisupply \
 		--wait
 
+	@echo "📡 Desplegando MQTT (EMQX)..."
+	@helm upgrade --install emqx ./mqtt/emqx \
+		--namespace medisupply \
+		--wait
+
+	@echo "🐰 Desplegando RabbitMQ..."
+	@helm upgrade --install rabbitmq ./rabbitmq \
+		--namespace medisupply \
+		--wait
+
 clean: ## Eliminar charts del cluster
 	@echo "🧹 Eliminando charts del cluster..."
+	@echo "❌ Eliminando rabbitmq..."
+	@helm uninstall rabbitmq --namespace medisupply || true
+	@echo "❌ Eliminando emqx..."
+	@helm uninstall emqx --namespace medisupply || true
 	@echo "❌ Eliminando kafka-ui..."
 	@helm uninstall kafka-ui --namespace medisupply || true
 	@echo "❌ Eliminando kafka..."
@@ -151,6 +169,25 @@ else
 	@echo "❌ PROVIDER debe ser 'kind' o 'minikube'"
 	@exit 1
 endif
+
+rabbitmq: ## Abrir RabbitMQ Management UI
+	@echo "🐰 Abriendo RabbitMQ Management UI..."
+	@echo "📡 Configurando port-forward para RabbitMQ..."
+	@kubectl port-forward -n medisupply svc/rabbitmq 15672:15672 &
+	@sleep 3
+	@echo "🌐 RabbitMQ Management UI disponible en: http://localhost:15672"
+	@echo "💡 Usuario: user, Contraseña: $(shell kubectl get secret --namespace medisupply rabbitmq -o jsonpath="{.data.rabbitmq-password}" | base64 -d)"
+	@echo "💡 Presiona Ctrl+C para detener el port-forward"
+
+mqtt: ## Abrir EMQX dashboard
+	@echo "📡 Abriendo EMQX dashboard..."
+	@echo "📡 Configurando port-forward para EMQX..."
+	@kubectl port-forward -n medisupply svc/emqx 18083:18083 &
+	@sleep 3
+	@echo "🌐 EMQX disponible en: http://localhost:18083"
+	@echo "💡 Usuario: admin, Contraseña: public"
+	@echo "💡 Presiona Ctrl+C para detener el port-forward"
+
 kafka-ui: ## Abrir Kafka UI dashboard
 	@echo "🖥️  Abriendo Kafka UI dashboard..."
 	@echo "📡 Configurando port-forward para Kafka UI..."
