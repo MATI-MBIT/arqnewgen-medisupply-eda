@@ -52,7 +52,6 @@ else
 endif
 	@echo "🎉 Cluster $(CLUSTER_NAME) con $(PROVIDER) listo!"
 
-deploy: ## Desplegar charts istio (base, istiod, gateway) y keda
 	@echo "📦 Desplegando charts en el cluster..."
 	@echo "🔧 Verificando que el cluster esté activo..."
 ifeq ($(PROVIDER),kind)
@@ -62,9 +61,9 @@ else
 endif
 	
 	@echo "📋 Agregando repositorios de Helm..."
-	@helm repo add istio https://istio-release.storage.googleapis.com/charts || true
-	@helm repo add kedacore https://kedacore.github.io/charts || true
-	@helm repo update
+#	@helm repo add istio https://istio-release.storage.googleapis.com/charts || true
+#	@helm repo add kedacore https://kedacore.github.io/charts || true
+#	@helm repo update
 	
 	@echo "🚀 Desplegando Istio Base..."
 	@helm upgrade --install istio-base ./istio/base \
@@ -90,7 +89,7 @@ endif
 		kubectl wait --for=condition=available --timeout=300s deployment/kiali -n istio-system; \
 
 	@echo "🌐 Desplegando Istio Gateway..."
-	@helm upgrade --install istio-gateway ./istio/gateway --debug \
+	@helm upgrade --install istio-gateway ./istio/gateway \
 		--namespace istio-system \
 		--set profile=demo \
 		--wait
@@ -103,22 +102,23 @@ endif
 	
 	@echo "✅ Todos los charts desplegados exitosamente!"
 
+deploy:
+	@echo "⚡ Desplegando Kafka..."
+	@kubectl create namespace medisupply --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace medisupply ya existe o fue creado"
+	@kubectl label namespace medisupply istio-injection=enabled
+	@helm upgrade --install kafka ./kafka \
+		--namespace medisupply \
+		--wait
+## 	--values ./config/kafka-values.yaml \
+
 clean: ## Eliminar charts del cluster
 	@echo "🧹 Eliminando charts del cluster..."
-	@echo "❌ Eliminando KEDA..."
-	@helm uninstall keda --namespace keda-system || true
-	@kubectl delete namespace keda-system --ignore-not-found=true
-	
-	@echo "❌ Eliminando Istio Gateway..."
-	@helm uninstall istio-gateway --namespace istio-system || true
-	
-	@echo "❌ Eliminando Istiod..."
-	@helm uninstall istiod --namespace istio-system || true
-	
-	@echo "❌ Eliminando Istio Base..."
-	@helm uninstall istio-base --namespace istio-system || true
-	@kubectl delete namespace istio-system --ignore-not-found=true
+	@echo "❌ Eliminando kafka..."
+	@helm uninstall kafka --namespace medisupply || true
 	@kubectl delete namespace medisupply --ignore-not-found=true
+
+	@echo "❌ Eliminando Kafka..."
+	@helm uninstall kafka --namespace medisupply || true
 	
 	@echo "✅ Charts eliminados del cluster!"
 
