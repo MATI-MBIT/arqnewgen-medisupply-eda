@@ -5,16 +5,16 @@ CLUSTER_NAME := local-k8s
 KUBECONFIG_PATH := ~/.kube/config
 PROVIDER := $(or $(PROVIDER),kind)
 
-.PHONY: help init deploy clean destroy kiali kafka-ui emqx rabbitmq
+.PHONY: help init deploy clean destroy kiali kafka-ui mqtt rabbitmq
 
 help: ## Mostrar ayuda
 	@echo "Comandos disponibles:"
 	@echo "  init PROVIDER=kind     - Crear cluster local con Kind (default)"
 	@echo "  init PROVIDER=minikube - Crear cluster local con Minikube"
-	@echo "  deploy                 - Desplegar Kafka, Kafka UI, MQTT y RabbitMQ"
+	@echo "  deploy                 - Desplegar Kafka, Kafka UI, EMQX, RabbitMQ y MQTT Event Generator"
 	@echo "  kiali                  - Abrir Kiali dashboard (requiere Istio)"
 	@echo "  kafka-ui               - Abrir Kafka UI dashboard"
-	@echo "  emqx                   - Abrir EMQX dashboard"
+	@echo "  mqtt                   - Abrir EMQX dashboard"
 	@echo "  rabbitmq               - Abrir RabbitMQ Management UI"
 	@echo "  clean                  - Eliminar charts del cluster"
 	@echo "  destroy                - Eliminar cluster completamente"
@@ -25,7 +25,7 @@ help: ## Mostrar ayuda
 	@echo "  make init PROVIDER=minikube"
 	@echo "  make kiali             # Abrir Kiali dashboard"
 	@echo "  make kafka-ui          # Abrir Kafka UI dashboard"
-	@echo "  make emqx              # Abrir EMQX dashboard"
+	@echo "  make mqtt              # Abrir EMQX dashboard"
 	@echo "  make rabbitmq          # Abrir RabbitMQ Management UI"
 
 init: ## Crear cluster local con Kind o Minikube
@@ -132,22 +132,49 @@ deploy:
 		--namespace medisupply \
 		--wait
 
+	@echo "📊 Desplegando MQTT Event Generator..."
+	@helm upgrade --install mqtt-event-generator ./mqtt-event-generator \
+		--namespace medisupply \
+		--wait
+
+	@echo ""
+	@echo "🎉 ¡Despliegue completado exitosamente!"
+	@echo "📋 Servicios desplegados:"
+	@echo "  ✅ Kafka + Kafka UI"
+	@echo "  ✅ EMQX (MQTT Broker)"
+	@echo "  ✅ RabbitMQ"
+	@echo "  ✅ MQTT Event Generator"
+	@echo ""
+	@echo "💡 Para acceder a los dashboards:"
+	@echo "  make kafka-ui    # Kafka UI en http://localhost:9090"
+	@echo "  make mqtt        # EMQX en http://localhost:18083"
+	@echo "  make rabbitmq    # RabbitMQ en http://localhost:15672"
+
 clean: ## Eliminar charts del cluster
 	@echo "🧹 Eliminando charts del cluster..."
-	@echo "❌ Eliminando rabbitmq..."
+	@echo ""
+	@echo "📊 Eliminando MQTT Event Generator..."
+	@helm uninstall mqtt-event-generator --namespace medisupply || true
+	@echo "🐰 Eliminando RabbitMQ..."
 	@helm uninstall rabbitmq --namespace medisupply || true
-	@echo "❌ Eliminando emqx..."
+	@echo "📡 Eliminando EMQX..."
 	@helm uninstall emqx --namespace medisupply || true
-	@echo "❌ Eliminando kafka-ui..."
+	@echo "🖥️  Eliminando Kafka UI..."
 	@helm uninstall kafka-ui --namespace medisupply || true
-	@echo "❌ Eliminando kafka..."
+	@echo "⚡ Eliminando Kafka..."
 	@helm uninstall kafka --namespace medisupply || true
+	@echo ""
+	@echo "🗑️  Eliminando namespace medisupply..."
 	@kubectl delete namespace medisupply --ignore-not-found=true
-
-	@echo "❌ Eliminando Kafka..."
-	@helm uninstall kafka --namespace medisupply || true
-	
-	@echo "✅ Charts eliminados del cluster!"
+	@echo ""
+	@echo "✅ Todos los charts eliminados del cluster!"
+	@echo "📋 Servicios eliminados:"
+	@echo "  ❌ MQTT Event Generator"
+	@echo "  ❌ RabbitMQ"
+	@echo "  ❌ EMQX (MQTT Broker)"
+	@echo "  ❌ Kafka UI"
+	@echo "  ❌ Kafka"
+	@echo "  ❌ Namespace medisupply"
 
 destroy: ## Eliminar cluster completamente
 	@echo "💥 Eliminando cluster $(CLUSTER_NAME)..."

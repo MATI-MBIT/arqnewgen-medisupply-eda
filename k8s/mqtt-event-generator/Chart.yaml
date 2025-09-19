@@ -1,0 +1,17 @@
+apiVersion: v2
+name: mqtt-event-generator
+description: A Helm chart for MQTT Event Generator service
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - mqtt
+  - event-generator
+  - iot
+  - messaging
+home: https://github.com/your-org/mqtt-event-generator
+sources:
+  - https://github.com/your-org/mqtt-event-generator
+maintainers:
+  - name: Development Team
+    email: dev@yourcompany.com
