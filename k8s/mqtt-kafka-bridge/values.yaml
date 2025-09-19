@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image:
+  repository: python
+  tag: "3.11-slim"
+  pullPolicy: IfNotPresent
+
+mqtt:
+  broker: "emqx"
+  port: 1883
+  topic: "events/sensor"
+
+kafka:
+  bootstrapServers: "kafka:9092"
+  topic: "mqtt-events"
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi

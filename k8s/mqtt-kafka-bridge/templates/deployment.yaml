@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mqtt-kafka-bridge.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mqtt-kafka-bridge.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mqtt-kafka-bridge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mqtt-kafka-bridge.selectorLabels" . | nindent 8 }}
+        app: mqtt-kafka-bridge
+        version: v1
+    spec:
+      initContainers:
+      - name: install-deps
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command:
+        - sh
+        - -c
+        - |
+          pip install kafka-python paho-mqtt
+          cp -r /usr/local/lib/python3.11/site-packages/* /shared/
+        volumeMounts:
+        - name: shared-libs
+          mountPath: /shared
+      containers:
+      - name: bridge
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - python
+        - -c
+        - |
+          import json
+          import time
+          import logging
+          from kafka import KafkaProducer
+          import paho.mqtt.client as mqtt
+          
+          logging.basicConfig(level=logging.INFO)
+          logger = logging.getLogger(__name__)
+          
+          # Kafka producer
+          producer = KafkaProducer(
+              bootstrap_servers=['{{ .Values.kafka.bootstrapServers }}'],
+              value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+              retries=3,
+              retry_backoff_ms=1000
+          )
+          
+          def on_connect(client, userdata, flags, rc):
+              logger.info(f"Connected to MQTT broker with result code {rc}")
+              client.subscribe("{{ .Values.mqtt.topic }}")
+          
+          def on_message(client, userdata, msg):
+              try:
+                  message = msg.payload.decode('utf-8')
+                  logger.info(f"Received MQTT message: {message}")
+                  
+                  # Send to Kafka
+                  producer.send('{{ .Values.kafka.topic }}', {'mqtt_topic': msg.topic, 'payload': message})
+                  producer.flush()
+                  logger.info(f"Sent message to Kafka topic: {{ .Values.kafka.topic }}")
+              except Exception as e:
+                  logger.error(f"Error processing message: {e}")
+          
+          # MQTT client
+          client = mqtt.Client()
+          client.on_connect = on_connect
+          client.on_message = on_message
+          
+          logger.info("Connecting to MQTT broker...")
+          client.connect("{{ .Values.mqtt.broker }}", {{ .Values.mqtt.port }}, 60)
+          
+          logger.info("Starting MQTT-Kafka bridge...")
+          client.loop_forever()
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: "/shared"
+        volumeMounts:
+        - name: shared-libs
+          mountPath: /shared
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import socket; s=socket.socket(); s.connect(('{{ .Values.mqtt.broker }}', {{ .Values.mqtt.port }})); s.close()"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import socket; s=socket.socket(); s.connect(('{{ .Values.mqtt.broker }}', {{ .Values.mqtt.port }})); s.close()"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: shared-libs
+        emptyDir: {}

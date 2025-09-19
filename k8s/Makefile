@@ -137,6 +137,11 @@ deploy:
 		--namespace medisupply \
 		--wait
 
+	@echo "🔗 Desplegando MQTT-Kafka Bridge..."
+	@helm upgrade --install mqtt-kafka-bridge ./mqtt-kafka-bridge \
+		--namespace medisupply \
+		--wait
+
 	@echo ""
 	@echo "🎉 ¡Despliegue completado exitosamente!"
 	@echo "📋 Servicios desplegados:"
@@ -144,6 +149,7 @@ deploy:
 	@echo "  ✅ EMQX (MQTT Broker)"
 	@echo "  ✅ RabbitMQ"
 	@echo "  ✅ MQTT Event Generator"
+	@echo "  ✅ MQTT-Kafka Bridge"
 	@echo ""
 	@echo "💡 Para acceder a los dashboards:"
 	@echo "  make kafka-ui    # Kafka UI en http://localhost:9090"
@@ -155,6 +161,8 @@ clean: ## Eliminar charts del cluster
 	@echo ""
 	@echo "📊 Eliminando MQTT Event Generator..."
 	@helm uninstall mqtt-event-generator --namespace medisupply || true
+	@echo "🔗 Eliminando MQTT-Kafka Bridge..."
+	@helm uninstall mqtt-kafka-bridge --namespace medisupply || true
 	@echo "🐰 Eliminando RabbitMQ..."
 	@helm uninstall rabbitmq --namespace medisupply || true
 	@echo "📡 Eliminando EMQX..."
@@ -170,6 +178,7 @@ clean: ## Eliminar charts del cluster
 	@echo "✅ Todos los charts eliminados del cluster!"
 	@echo "📋 Servicios eliminados:"
 	@echo "  ❌ MQTT Event Generator"
+	@echo "  ❌ Kafka Connect"
 	@echo "  ❌ RabbitMQ"
 	@echo "  ❌ EMQX (MQTT Broker)"
 	@echo "  ❌ Kafka UI"
