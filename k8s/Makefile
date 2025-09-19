@@ -5,7 +5,7 @@ CLUSTER_NAME := local-k8s
 KUBECONFIG_PATH := ~/.kube/config
 PROVIDER := $(or $(PROVIDER),kind)
 
-.PHONY: help init deploy clean destroy kiali
+.PHONY: help init deploy clean destroy kiali kafka-ui
 
 help: ## Mostrar ayuda
 	@echo "Comandos disponibles:"
@@ -13,6 +13,7 @@ help: ## Mostrar ayuda
 	@echo "  init PROVIDER=minikube - Crear cluster local con Minikube"
 	@echo "  deploy                 - Desplegar charts istio, gateway y keda"
 	@echo "  kiali                  - Abrir Kiali dashboard (requiere Istio)"
+	@echo "  kafka-ui               - Abrir Kafka UI dashboard"
 	@echo "  clean                  - Eliminar charts del cluster"
 	@echo "  destroy                - Eliminar cluster completamente"
 	@echo ""
@@ -21,6 +22,7 @@ help: ## Mostrar ayuda
 	@echo "  make init PROVIDER=kind"
 	@echo "  make init PROVIDER=minikube"
 	@echo "  make kiali             # Abrir Kiali dashboard"
+	@echo "  make kafka-ui          # Abrir Kafka UI dashboard"
 
 init: ## Crear cluster local con Kind o Minikube
 	@echo "🚀 Creando cluster local con $(PROVIDER)..."
@@ -103,16 +105,23 @@ endif
 	@echo "✅ Todos los charts desplegados exitosamente!"
 
 deploy:
-	@echo "⚡ Desplegando Kafka..."
 	@kubectl create namespace medisupply --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace medisupply ya existe o fue creado"
 	@kubectl label namespace medisupply istio-injection=enabled
+	@echo "⚡ Desplegando Kafka..."
 	@helm upgrade --install kafka ./kafka \
 		--namespace medisupply \
 		--wait
 ## 	--values ./config/kafka-values.yaml \
 
+	@echo "🖥️  Desplegando Kafka UI..."
+	@helm upgrade --install kafka-ui ./kafka-ui \
+		--namespace medisupply \
+		--wait
+
 clean: ## Eliminar charts del cluster
 	@echo "🧹 Eliminando charts del cluster..."
+	@echo "❌ Eliminando kafka-ui..."
+	@helm uninstall kafka-ui --namespace medisupply || true
 	@echo "❌ Eliminando kafka..."
 	@helm uninstall kafka --namespace medisupply || true
 	@kubectl delete namespace medisupply --ignore-not-found=true
@@ -142,3 +151,18 @@ else
 	@echo "❌ PROVIDER debe ser 'kind' o 'minikube'"
 	@exit 1
 endif
+kafka-ui: ## Abrir Kafka UI dashboard
+	@echo "🖥️  Abriendo Kafka UI dashboard..."
+	@echo "📡 Configurando port-forward para Kafka UI..."
+	@kubectl port-forward -n medisupply svc/kafka-ui 9090:8080 &
+	@sleep 3
+	@echo "🌐 Kafka UI disponible en: http://localhost:9090"
+	@echo "💡 Presiona Ctrl+C para detener el port-forward"
+
+kiali: ## Abrir Kiali dashboard
+	@echo "🔍 Abriendo Kiali dashboard..."
+	@echo "📡 Configurando port-forward para Kiali..."
+	@kubectl port-forward -n istio-system svc/kiali 20001:20001 &
+	@sleep 3
+	@echo "🌐 Kiali disponible en: http://localhost:20001"
+	@echo "💡 Presiona Ctrl+C para detener el port-forward"

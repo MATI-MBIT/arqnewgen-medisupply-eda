@@ -1,0 +1,34 @@
+replicaCount: 1
+
+image:
+  repository: provectuslabs/kafka-ui
+  tag: "latest"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+kafka:
+  clusters:
+    - name: local
+      bootstrapServers: kafka:9092
+      
+env:
+  - name: KAFKA_CLUSTERS_0_NAME
+    value: "local"
+  - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+    value: "kafka:9092"
+  - name: KAFKA_CLUSTERS_0_READONLY
+    value: "false"
