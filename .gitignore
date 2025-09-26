@@ -1,0 +1,12 @@
+# Global ignores for this repository
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
