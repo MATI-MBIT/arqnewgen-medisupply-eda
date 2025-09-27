@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,6 +11,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	publisher "mqtt-order-event-client/publisher"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/gin-gonic/gin"
@@ -90,6 +93,7 @@ func (es *EventStore) GetEventCount() int {
 }
 
 var eventStore *EventStore
+var orderPublisher *publisher.Publisher
 
 func main() {
 	// Initialize event store with max 1000 events
@@ -137,6 +141,19 @@ func main() {
 	}
 
 	log.Printf("Subscribed to topic: %s", topic)
+
+	// Initialize Kafka Order Publisher from environment
+	var err error
+	orderPublisher, err = publisher.NewPublisherFromEnv()
+	if err != nil {
+		log.Printf("Warning: could not initialize Kafka publisher: %v", err)
+	} else {
+		defer func() {
+			if err := orderPublisher.Close(); err != nil {
+				log.Printf("Error closing Kafka publisher: %v", err)
+			}
+		}()
+	}
 
 	// Start HTTP server in a goroutine
 	go startHTTPServer(httpPort)
@@ -278,6 +295,27 @@ var messageHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Messa
 
 	log.Printf("Event stored: ID=%s, Type=%s, Source=%s, Temp=%.2f°C, Humidity=%.2f%%",
 		event.ID, event.Type, event.Source, event.Data.Temperature, event.Data.Humidity)
+	log.Printf("Publishing order damage event for sensor/order id=%s", event.ID)
+	// Publish order damage event to Kafka after logging and storing
+	if orderPublisher != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := orderPublisher.PublishOrderDamageFromSensor(
+			ctx,
+			event.ID,
+			"mqtt-order-event-client",
+			event.Data.Temperature,
+			event.Data.Humidity,
+			event.Data.Status,
+			msg.Topic(),
+		); err != nil {
+			log.Printf("Error publishing order damage event: %v", err)
+		} else {
+			log.Printf("Order damage event published for sensor/order id=%s", event.ID)
+		}
+	} else {
+		log.Printf("Order publisher not initialized, skipping order damage event")
+	}
 }
 
 // MQTT connection handler
