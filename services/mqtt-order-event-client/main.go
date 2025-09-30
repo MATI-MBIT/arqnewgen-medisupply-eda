@@ -93,7 +93,7 @@ func (es *EventStore) GetEventCount() int {
 }
 
 var eventStore *EventStore
-var orderPublisher *publisher.Publisher
+var orderPublisher *publisher.MqttPublisher
 
 func main() {
 	// Initialize event store with max 1000 events
@@ -102,7 +102,7 @@ func main() {
 	// MQTT Configuration
 	broker := getEnv("MQTT_BROKER", "tcp://localhost:1883")
 	clientID := getEnv("MQTT_CLIENT_ID", "order-event-client")
-	topic := getEnv("MQTT_TOPIC", "events/sensor")
+	topic := getEnv("MQTT_TOPIC", "events/order-damage")
 	username := getEnv("MQTT_USERNAME", "")
 	password := getEnv("MQTT_PASSWORD", "")
 
@@ -142,15 +142,15 @@ func main() {
 
 	log.Printf("Subscribed to topic: %s", topic)
 
-	// Initialize Kafka Order Publisher from environment
+	// Initialize MQTT Order Publisher from environment
 	var err error
-	orderPublisher, err = publisher.NewPublisherFromEnv()
+	orderPublisher, err = publisher.NewMqttPublisherFromEnv()
 	if err != nil {
-		log.Printf("Warning: could not initialize Kafka publisher: %v", err)
+		log.Printf("Warning: could not initialize MQTT publisher: %v", err)
 	} else {
 		defer func() {
 			if err := orderPublisher.Close(); err != nil {
-				log.Printf("Error closing Kafka publisher: %v", err)
+				log.Printf("Error closing MQTT publisher: %v", err)
 			}
 		}()
 	}
