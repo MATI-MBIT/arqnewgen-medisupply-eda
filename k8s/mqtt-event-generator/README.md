@@ -111,9 +111,11 @@ kubectl get pods -l app.kubernetes.io/name=emqx -n medisupply
 # Verificar el servicio EMQX
 kubectl get svc emqx -n medisupply
 
-# Probar conectividad desde el pod del event generator
-kubectl exec -it deployment/mqtt-event-generator -n medisupply -- \
-  sh -c 'nc -zv emqx.medisupply.svc.cluster.local 1883'
+# Verificar health check del event generator
+curl http://localhost:8080/health  # Después de port-forward
+
+# Port-forward para testing
+kubectl port-forward deployment/mqtt-event-generator 8080:8080 -n medisupply
 ```
 
 ### Configuración de EMQX

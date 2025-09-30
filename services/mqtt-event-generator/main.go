@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -27,6 +29,12 @@ type EventData struct {
 	Status      string  `json:"status"`
 }
 
+type HealthResponse struct {
+	Status    string    `json:"status"`
+	Timestamp time.Time `json:"timestamp"`
+	Service   string    `json:"service"`
+}
+
 func main() {
 	// Configuración MQTT
 	broker := getEnv("MQTT_BROKER", "tcp://localhost:1883")
@@ -37,6 +45,9 @@ func main() {
 	
 	// Configuración de frecuencia de eventos
 	eventInterval := getEventInterval("EVENT_INTERVAL_SECONDS", 30)
+	
+	// Configuración del servidor HTTP
+	httpPort := getEnv("HTTP_PORT", "8080")
 
 	// Configurar opciones del cliente MQTT
 	opts := mqtt.NewClientOptions()
@@ -66,6 +77,19 @@ func main() {
 	log.Printf("Publicando eventos en el topic: %s", topic)
 	log.Printf("Frecuencia de eventos: cada %d segundos", eventInterval)
 
+	// Iniciar servidor HTTP para health check
+	server := &http.Server{
+		Addr:    ":" + httpPort,
+		Handler: setupRoutes(),
+	}
+
+	go func() {
+		log.Printf("Servidor HTTP iniciado en puerto %s", httpPort)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Error iniciando servidor HTTP: %v", err)
+		}
+	}()
+
 	// Canal para manejar señales del sistema
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -84,6 +108,15 @@ func main() {
 			publishEvent(client, topic)
 		case <-sigChan:
 			log.Println("Recibida señal de terminación, cerrando...")
+			
+			// Cerrar servidor HTTP
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := server.Shutdown(ctx); err != nil {
+				log.Printf("Error cerrando servidor HTTP: %v", err)
+			}
+			
+			// Desconectar cliente MQTT
 			client.Disconnect(250)
 			return
 		}
@@ -151,4 +184,34 @@ var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
 
 var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
 	log.Printf("Conexión MQTT perdida: %v", err)
+}
+
+// Configuración de rutas HTTP
+func setupRoutes() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", healthHandler)
+	return mux
+}
+
+// Handler para el endpoint de health check
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	response := HealthResponse{
+		Status:    "healthy",
+		Timestamp: time.Now(),
+		Service:   "mqtt-event-generator",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding health response: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }
