@@ -40,11 +40,30 @@ spec:
           import json
           import time
           import logging
+          import os
           from kafka import KafkaProducer
           import paho.mqtt.client as mqtt
           
           logging.basicConfig(level=logging.INFO)
           logger = logging.getLogger(__name__)
+          
+          # Configuration from environment variables
+          mqtt_topics_env = os.getenv('MQTT_TOPICS', '')
+          kafka_topic_prefix = os.getenv('KAFKA_TOPIC_PREFIX', '')
+          topic_mapping_env = os.getenv('TOPIC_MAPPING', '{}')
+          preserve_topic_names = os.getenv('PRESERVE_TOPIC_NAMES', 'true').lower() == 'true'
+          
+          # Parse topics and mapping
+          mqtt_topics = [t.strip() for t in mqtt_topics_env.split(',') if t.strip()]
+          try:
+              topic_mapping = json.loads(topic_mapping_env)
+          except:
+              topic_mapping = {}
+          
+          logger.info(f"MQTT Topics to subscribe: {mqtt_topics}")
+          logger.info(f"Topic mapping: {topic_mapping}")
+          logger.info(f"Preserve topic names: {preserve_topic_names}")
+          logger.info(f"Kafka topic prefix: {kafka_topic_prefix}")
           
           # Kafka producer
           producer = KafkaProducer(
@@ -54,19 +73,42 @@ spec:
               retry_backoff_ms=1000
           )
           
+          def get_kafka_topic(mqtt_topic):
+              # Check custom mapping first
+              if mqtt_topic in topic_mapping:
+                  return topic_mapping[mqtt_topic]
+              
+              # Use original topic name with optional prefix
+              if preserve_topic_names:
+                  return f"{kafka_topic_prefix}{mqtt_topic}" if kafka_topic_prefix else mqtt_topic
+              
+              # Default fallback
+              return f"{kafka_topic_prefix}mqtt-events"
+          
           def on_connect(client, userdata, flags, rc):
               logger.info(f"Connected to MQTT broker with result code {rc}")
-              client.subscribe("{{ .Values.mqtt.topic }}")
+              for topic in mqtt_topics:
+                  client.subscribe(topic)
+                  logger.info(f"Subscribed to MQTT topic: {topic}")
           
           def on_message(client, userdata, msg):
               try:
                   message = msg.payload.decode('utf-8')
-                  logger.info(f"Received MQTT message: {message}")
+                  mqtt_topic = msg.topic
+                  kafka_topic = get_kafka_topic(mqtt_topic)
+                  
+                  logger.info(f"Received MQTT message from {mqtt_topic}: {message}")
                   
                   # Send to Kafka
-                  producer.send('{{ .Values.kafka.topic }}', {'mqtt_topic': msg.topic, 'payload': message})
+                  kafka_message = {
+                      'mqtt_topic': mqtt_topic,
+                      'payload': message,
+                      'timestamp': time.time()
+                  }
+                  
+                  producer.send(kafka_topic, kafka_message)
                   producer.flush()
-                  logger.info(f"Sent message to Kafka topic: {{ .Values.kafka.topic }}")
+                  logger.info(f"Sent message to Kafka topic: {kafka_topic}")
               except Exception as e:
                   logger.error(f"Error processing message: {e}")
           
@@ -85,6 +127,14 @@ spec:
           value: "1"
         - name: PYTHONPATH
           value: "/shared"
+        - name: MQTT_TOPICS
+          value: "{{ join "," .Values.mqtt.topics }}"
+        - name: PRESERVE_TOPIC_NAMES
+          value: "{{ .Values.kafka.preserveTopicNames }}"
+        - name: KAFKA_TOPIC_PREFIX
+          value: "{{ .Values.kafka.topicPrefix }}"
+        - name: TOPIC_MAPPING
+          value: {{ .Values.kafka.topicMapping | toJson | quote }}
         volumeMounts:
         - name: shared-libs
           mountPath: /shared

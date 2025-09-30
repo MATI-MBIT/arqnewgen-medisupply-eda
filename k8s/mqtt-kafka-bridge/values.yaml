@@ -8,11 +8,20 @@ image:
 mqtt:
   broker: "emqx"
   port: 1883
-  topic: "events/sensor"
+  topics:
+    - "events/sensor"
+    - "events/order-damage"
 
 kafka:
   bootstrapServers: "kafka:9092"
-  topic: "mqtt-events"
+  preserveTopicNames: true
+  topicPrefix: ""
+  topicMapping:
+    "events/sensor": "events-sensor"
+    "events/order-damage": "events-order-damage"
+    # Example custom mapping:
+    # "events/sensor": "kafka-sensor-events"
+    # "events/temperature": "kafka-temp-events"
 
 resources:
   limits:
