@@ -140,12 +140,10 @@ deploy:
 	@echo "📊 Desplegando MQTT Order Event Client..."
 	@helm upgrade --install mqtt-order-event-client ./mqtt-order-event-client \
 		--namespace medisupply \
-		--wait
 
 	@echo "🔗 Desplegando MQTT-Kafka Bridge..."
 	@helm upgrade --install mqtt-kafka-bridge ./mqtt-kafka-bridge \
 		--namespace medisupply \
-		--wait
 
 	@echo ""
 	@echo "🎉 ¡Despliegue completado exitosamente!"
