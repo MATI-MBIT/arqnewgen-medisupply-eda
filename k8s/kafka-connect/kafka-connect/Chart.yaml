@@ -1,0 +1,31 @@
+apiVersion: v2
+appVersion: 7.2.2
+dependencies:
+- condition: kafka.create
+  name: kafka
+  repository: https://charts.bitnami.com/bitnami/
+  version: 19.0.x
+- condition: schema-registry.create
+  name: schema-registry
+  repository: https://charts.bitnami.com/bitnami/
+  version: 6.0.x
+description: Confluent Kafka connect Helm Chart with the ability to add plugins as
+  required
+icon: https://github.com/licenseware/helm-charts/raw/main/static/png/kafka.png
+keywords:
+- kafka
+- confluent
+- connect
+- kafka connect
+- kafka connect sink
+- kafka connect source
+- kafka connect plugin
+- kafka connect connector
+- kafka connect transformer
+- kafka connect transform
+- stream
+- streaming
+- streaming platform
+name: kafka-connect
+type: application
+version: 0.4.0
