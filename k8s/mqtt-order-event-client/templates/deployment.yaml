@@ -39,8 +39,10 @@ spec:
               value: {{ .Values.mqtt.broker | quote }}
             - name: MQTT_CLIENT_ID
               value: {{ printf "%s-%s" .Values.mqtt.clientId .Release.Name | quote }}
-            - name: MQTT_TOPIC
-              value: {{ .Values.mqtt.topic | quote }}
+            - name: MQTT_SUBSCRIBE_TOPIC
+              value: {{ .Values.mqtt.subscribeTopic | quote }}
+            - name: MQTT_PUBLISH_TOPIC
+              value: {{ .Values.mqtt.publishTopic | quote }}
             - name: MQTT_USERNAME
               value: {{ .Values.mqtt.username | quote }}
             - name: MQTT_PASSWORD

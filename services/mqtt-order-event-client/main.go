@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,8 +10,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	publisher "mqtt-order-event-client/publisher"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/gin-gonic/gin"
@@ -93,7 +90,8 @@ func (es *EventStore) GetEventCount() int {
 }
 
 var eventStore *EventStore
-var orderPublisher *publisher.MqttPublisher
+var mqttClient mqtt.Client
+var orderDamagePublishTopic string
 
 func main() {
 	// Initialize event store with max 1000 events
@@ -102,7 +100,8 @@ func main() {
 	// MQTT Configuration
 	broker := getEnv("MQTT_BROKER", "tcp://localhost:1883")
 	clientID := getEnv("MQTT_CLIENT_ID", "order-event-client")
-	topic := getEnv("MQTT_TOPIC", "events/order-damage")
+	subscribeTopic := getEnv("MQTT_SUBSCRIBE_TOPIC", "events/sensor")
+	publishTopic := getEnv("MQTT_PUBLISH_TOPIC", "events/order-damage")
 	username := getEnv("MQTT_USERNAME", "")
 	password := getEnv("MQTT_PASSWORD", "")
 
@@ -133,27 +132,20 @@ func main() {
 		log.Fatalf("Error connecting to MQTT broker: %v", token.Error())
 	}
 
+	// Store client and publish topic globally for message handler
+	mqttClient = client
+	orderDamagePublishTopic = publishTopic
+
 	log.Printf("Connected to MQTT broker: %s", broker)
 
-	// Subscribe to the topic
-	if token := client.Subscribe(topic, 1, nil); token.Wait() && token.Error() != nil {
-		log.Fatalf("Error subscribing to topic %s: %v", topic, token.Error())
+	// Subscribe to the sensor events topic
+	if token := client.Subscribe(subscribeTopic, 1, nil); token.Wait() && token.Error() != nil {
+		log.Fatalf("Error subscribing to topic %s: %v", subscribeTopic, token.Error())
 	}
 
-	log.Printf("Subscribed to topic: %s", topic)
+	log.Printf("Subscribed to topic: %s", subscribeTopic)
 
-	// Initialize MQTT Order Publisher from environment
-	var err error
-	orderPublisher, err = publisher.NewMqttPublisherFromEnv()
-	if err != nil {
-		log.Printf("Warning: could not initialize MQTT publisher: %v", err)
-	} else {
-		defer func() {
-			if err := orderPublisher.Close(); err != nil {
-				log.Printf("Error closing MQTT publisher: %v", err)
-			}
-		}()
-	}
+
 
 	// Start HTTP server in a goroutine
 	go startHTTPServer(httpPort)
@@ -170,7 +162,7 @@ func main() {
 	log.Println("Received termination signal, shutting down...")
 
 	// Unsubscribe and disconnect
-	if token := client.Unsubscribe(topic); token.Wait() && token.Error() != nil {
+	if token := client.Unsubscribe(subscribeTopic); token.Wait() && token.Error() != nil {
 		log.Printf("Error unsubscribing: %v", token.Error())
 	}
 
@@ -280,6 +272,19 @@ func startHTTPServer(port string) {
 	}
 }
 
+// OrderDamageEvent represents the order damage event to be published
+type OrderDamageEvent struct {
+	OrderID     string    `json:"order_id"`
+	SensorID    string    `json:"sensor_id"`
+	Timestamp   time.Time `json:"timestamp"`
+	DamageType  string    `json:"damage_type"`
+	Severity    string    `json:"severity"`
+	Temperature float64   `json:"temperature"`
+	Humidity    float64   `json:"humidity"`
+	Status      string    `json:"status"`
+	Source      string    `json:"source"`
+}
+
 // MQTT message handler - processes incoming events
 var messageHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	log.Printf("Received message from topic %s", msg.Topic())
@@ -295,27 +300,61 @@ var messageHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Messa
 
 	log.Printf("Event stored: ID=%s, Type=%s, Source=%s, Temp=%.2f°C, Humidity=%.2f%%",
 		event.ID, event.Type, event.Source, event.Data.Temperature, event.Data.Humidity)
-	log.Printf("Publishing order damage event for sensor/order id=%s", event.ID)
-	// Publish order damage event to Kafka after logging and storing
-	if orderPublisher != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := orderPublisher.PublishOrderDamageFromSensor(
-			ctx,
-			event.ID,
-			"mqtt-order-event-client",
-			event.Data.Temperature,
-			event.Data.Humidity,
-			event.Data.Status,
-			msg.Topic(),
-		); err != nil {
-			log.Printf("Error publishing order damage event: %v", err)
-		} else {
-			log.Printf("Order damage event published for sensor/order id=%s", event.ID)
-		}
-	} else {
-		log.Printf("Order publisher not initialized, skipping order damage event")
+
+	// Create order damage event based on sensor data
+	orderDamageEvent := OrderDamageEvent{
+		OrderID:     event.ID, // Using sensor ID as order ID for this example
+		SensorID:    event.ID,
+		Timestamp:   time.Now(),
+		DamageType:  determineDamageType(event.Data),
+		Severity:    determineSeverity(event.Data),
+		Temperature: event.Data.Temperature,
+		Humidity:    event.Data.Humidity,
+		Status:      event.Data.Status,
+		Source:      "mqtt-order-event-client",
 	}
+
+	// Publish order damage event to MQTT
+	orderDamagePayload, err := json.Marshal(orderDamageEvent)
+	if err != nil {
+		log.Printf("Error marshaling order damage event: %v", err)
+		return
+	}
+
+	log.Printf("Publishing order damage event for order/sensor id=%s", event.ID)
+	if token := mqttClient.Publish(orderDamagePublishTopic, 1, false, orderDamagePayload); token.Wait() && token.Error() != nil {
+		log.Printf("Error publishing order damage event: %v", token.Error())
+	} else {
+		log.Printf("Order damage event published to topic %s for order/sensor id=%s", orderDamagePublishTopic, event.ID)
+	}
+}
+
+// determineDamageType determines the type of damage based on sensor data
+func determineDamageType(data EventData) string {
+	if data.Temperature > 30 || data.Temperature < 0 {
+		return "temperature_damage"
+	}
+	if data.Humidity > 80 || data.Humidity < 20 {
+		return "humidity_damage"
+	}
+	if data.Status != "active" {
+		return "sensor_malfunction"
+	}
+	return "environmental_stress"
+}
+
+// determineSeverity determines the severity of damage based on sensor data
+func determineSeverity(data EventData) string {
+	if data.Temperature > 40 || data.Temperature < -10 || data.Humidity > 90 || data.Humidity < 10 {
+		return "critical"
+	}
+	if data.Temperature > 35 || data.Temperature < -5 || data.Humidity > 85 || data.Humidity < 15 {
+		return "high"
+	}
+	if data.Status != "active" {
+		return "medium"
+	}
+	return "low"
 }
 
 // MQTT connection handler

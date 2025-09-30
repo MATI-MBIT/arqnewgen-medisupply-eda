@@ -33,14 +33,15 @@ COPY --from=builder /app/order-event-client /order-event-client
 # Usar usuario no-root por seguridad
 USER nonroot:nonroot
 
-# Exponer puerto (opcional, para métricas futuras)
-EXPOSE 8010
+# Exponer puerto HTTP para la API REST
+EXPOSE 8080
 
 # Set default environment variables
 ENV MQTT_BROKER=tcp://localhost:1883
 ENV MQTT_CLIENT_ID=order-event-client
-ENV MQTT_TOPIC=events/sensor
-ENV HTTP_PORT=8110
+ENV MQTT_SUBSCRIBE_TOPIC=events/sensor
+ENV MQTT_PUBLISH_TOPIC=events/order-damage
+ENV HTTP_PORT=8080
 
 # Comando por defecto
 ENTRYPOINT ["/order-event-client"]

@@ -4,7 +4,7 @@ Este chart despliega el servicio MQTT Order Event Client en Kubernetes.
 
 ## Descripción
 
-El MQTT Order Event Client es un servicio que se suscribe a eventos publicados por `mqtt-event-generator` a través de un broker MQTT (EMQX) y expone una API HTTP para consultar los eventos recibidos y estadísticas básicas.
+El MQTT Order Event Client es un servicio que se suscribe a eventos de sensores del tópico `events/sensor`, los procesa y publica eventos de daño de órdenes al tópico `events/order-damage` en el mismo broker MQTT (EMQX). También expone una API HTTP para consultar los eventos recibidos y estadísticas básicas.
 
 ## Instalación
 
@@ -26,7 +26,8 @@ helm upgrade --install mqtt-order-event-client ./mqtt-order-event-client \
 | `image.tag` | Tag de la imagen | `latest` |
 | `mqtt.broker` | URL del broker MQTT | `tcp://emqx.medisupply.svc.cluster.local:1883` |
 | `mqtt.clientId` | ID del cliente MQTT | `order-event-client` |
-| `mqtt.topic` | Topic a suscribir | `events/sensor` |
+| `mqtt.subscribeTopic` | Tópico de suscripción | `events/sensor` |
+| `mqtt.publishTopic` | Tópico de publicación | `events/order-damage` |
 | `mqtt.username` | Usuario MQTT | `admin` |
 | `mqtt.password` | Contraseña MQTT | `public` |
 | `service.port` | Puerto HTTP expuesto por el servicio | `8080` |
@@ -39,7 +40,8 @@ replicaCount: 2
 
 mqtt:
   broker: "tcp://my-mqtt-broker:1883"
-  topic: "sensors/temperature"
+  subscribeTopic: "sensors/temperature"
+  publishTopic: "events/custom-damage"
   username: "myuser"
   password: "mypassword"
 
