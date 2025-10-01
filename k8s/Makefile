@@ -11,19 +11,23 @@ help: ## Mostrar ayuda
 	@echo "Comandos disponibles:"
 	@echo "  init PROVIDER=kind     - Crear cluster local con Kind (default)"
 	@echo "  init PROVIDER=minikube - Crear cluster local con Minikube"
-	@echo "  deploy                 - Desplegar Kafka, Kafka UI, EMQX, RabbitMQ y MQTT Event Generator"
+	@echo "  deploy                 - Desplegar toda la arquitectura EDA completa"
+	@echo "  status                 - Mostrar estado de todos los componentes"
 	@echo "  kiali                  - Abrir Kiali dashboard (requiere Istio)"
 	@echo "  kafka-ui               - Abrir Kafka UI dashboard"
+	@echo ""
 	@echo "  mqtt                   - Abrir EMQX dashboard"
 	@echo "  rabbitmq               - Abrir RabbitMQ Management UI"
 	@echo "  clean                  - Eliminar charts del cluster"
 	@echo "  destroy                - Eliminar cluster completamente"
 	@echo ""
+	@echo "🔄 Arquitectura desplegada:"
+	@echo "  Flujo: MQTT → Kafka → RabbitMQ"
+	@echo ""
 	@echo "Ejemplos:"
 	@echo "  make init              # Usa Kind por defecto"
-	@echo "  make init PROVIDER=kind"
-	@echo "  make init PROVIDER=minikube"
-	@echo "  make kiali             # Abrir Kiali dashboard"
+	@echo "  make deploy            # Despliega arquitectura completa"
+	@echo "  make status            # Ver estado de componentes"
 	@echo "  make kafka-ui          # Abrir Kafka UI dashboard"
 	@echo "  make mqtt              # Abrir EMQX dashboard"
 	@echo "  make rabbitmq          # Abrir RabbitMQ Management UI"
@@ -111,16 +115,21 @@ endif
 deploy:
 	@kubectl create namespace medisupply --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace medisupply ya existe o fue creado"
 	@kubectl label namespace medisupply istio-injection=enabled
+
 	@echo "⚡ Desplegando Kafka..."
 	@helm upgrade --install kafka ./kafka \
 		--namespace medisupply \
 		--values ./config/kafka-values.yaml \
 		--wait
 
-	@echo "🖥️  Desplegando Kafka UI..."
+
+
+	@echo "🖥️  Desplegando Kafka UI (cluster principal)..."
 	@helm upgrade --install kafka-ui ./kafka-ui \
 		--namespace medisupply \
 		--wait
+
+
 
 	@echo "📡 Desplegando MQTT (EMQX)..."
 	@helm upgrade --install emqx ./mqtt/emqx \
@@ -147,10 +156,7 @@ deploy:
 		--namespace medisupply \
 		--wait
 
-	@echo "🔗 Desplegando Strimzi..."
-	@helm upgrade --install strimzi-operator strimzi/strimzi-kafka-operator \
-		--namespace medisupply \
-		--wait
+
 
 	@echo ""
 	@echo "🎉 ¡Despliegue completado exitosamente!"
@@ -159,31 +165,45 @@ deploy:
 	@echo "  ✅ EMQX (MQTT Broker)"
 	@echo "  ✅ RabbitMQ"
 	@echo "  ✅ MQTT Event Generator"
+	@echo "  ✅ MQTT Order Event Client"
 	@echo "  ✅ MQTT-Kafka Bridge"
 	@echo "  ✅ Strimzi Operator"
+	@echo "  ✅ Kafka Pedidos (Cluster secundario)"
+	@echo "  ✅ Kafka Connect + RabbitMQ Connector"
+	@echo "  ✅ MirrorMaker2 (MM2)"
+	@echo ""
+	@echo ""
+	@echo "🔄 Flujo de datos configurado:"
+	@echo "  📡 MQTT → Kafka → RabbitMQ:"
+	@echo "     mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge → Kafka"
 	@echo ""
 	@echo "💡 Para acceder a los dashboards:"
 	@echo "  make kafka-ui    # Kafka UI en http://localhost:9090"
 	@echo "  make mqtt        # EMQX en http://localhost:18083"
 	@echo "  make rabbitmq    # RabbitMQ en http://localhost:15672"
+	@echo ""
 
 clean: ## Eliminar charts del cluster
 	@echo "🧹 Eliminando charts del cluster..."
 	@echo ""
 	@echo "📊 Eliminando MQTT Event Generator..."
 	@helm uninstall mqtt-event-generator --namespace medisupply || true
+
 	@echo "🔗 Eliminando MQTT-Kafka Bridge..."
 	@helm uninstall mqtt-kafka-bridge --namespace medisupply || true
+	@echo "📊 Eliminando MQTT Order Event Client..."
+	@helm uninstall mqtt-order-event-client --namespace medisupply || true
 	@echo "🐰 Eliminando RabbitMQ..."
 	@helm uninstall rabbitmq --namespace medisupply || true
 	@echo "📡 Eliminando EMQX..."
 	@helm uninstall emqx --namespace medisupply || true
+
 	@echo "🖥️  Eliminando Kafka UI..."
 	@helm uninstall kafka-ui --namespace medisupply || true
+
+
 	@echo "⚡ Eliminando Kafka..."
 	@helm uninstall kafka --namespace medisupply || true
-	@echo "⚡ Eliminando Strimzi..."
-	@helm uninstall strimzi-operator --namespace medisupply || true
 	@echo ""
 	@echo "🗑️  Eliminando namespace medisupply..."
 	@kubectl delete namespace medisupply --ignore-not-found=true
@@ -191,12 +211,16 @@ clean: ## Eliminar charts del cluster
 	@echo "✅ Todos los charts eliminados del cluster!"
 	@echo "📋 Servicios eliminados:"
 	@echo "  ❌ MQTT Event Generator"
+	@echo "  ❌ MQTT Order Event Client"
 	@echo "  ❌ MQTT-Kafka Bridge"
 	@echo "  ❌ RabbitMQ"
 	@echo "  ❌ EMQX (MQTT Broker)"
 	@echo "  ❌ Kafka UI"
 	@echo "  ❌ Kafka"
-	@echo "  ❌ Strimzi"
+	@echo "  ❌ Kafka Pedidos"
+	@echo "  ❌ Kafka Connect + Conectores"
+	@echo "  ❌ MirrorMaker2"
+	@echo "  ❌ Strimzi Operator"
 	@echo "  ❌ Namespace medisupply"
 
 destroy: ## Eliminar cluster completamente
@@ -253,3 +277,17 @@ kiali: ## Abrir Kiali dashboard
 	@sleep 3
 	@echo "🌐 Kiali disponible en: http://localhost:20001"
 	@echo "💡 Presiona Ctrl+C para detener el port-forward"
+
+
+
+status: ## Mostrar estado de todos los componentes
+	@echo "📊 Estado de los componentes del sistema:"
+	@echo ""
+	@echo "🔍 Pods en namespace medisupply:"
+	@kubectl get pods -n medisupply -o wide || echo "❌ Error obteniendo pods"
+	@echo ""
+	@echo "🔍 Recursos de Strimzi:"
+	@kubectl get kafka,kafkaconnect,kafkamirrormaker2,kafkatopic,kafkaconnector -n medisupply || echo "❌ Error obteniendo recursos Strimzi"
+	@echo ""
+	@echo "🔍 Servicios:"
+	@kubectl get svc -n medisupply || echo "❌ Error obteniendo servicios"
