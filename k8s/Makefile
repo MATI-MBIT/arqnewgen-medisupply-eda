@@ -183,7 +183,7 @@ clean: ## Eliminar charts del cluster
 	@echo "✅ Todos los charts eliminados del cluster!"
 	@echo "📋 Servicios eliminados:"
 	@echo "  ❌ MQTT Event Generator"
-	@echo "  ❌ Kafka Connect"
+	@echo "  ❌ MQTT-Kafka Bridge"
 	@echo "  ❌ RabbitMQ"
 	@echo "  ❌ EMQX (MQTT Broker)"
 	@echo "  ❌ Kafka UI"
