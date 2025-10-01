@@ -147,6 +147,11 @@ deploy:
 		--namespace medisupply \
 		--wait
 
+	@echo "🔗 Desplegando Strimzi..."
+	@helm upgrade --install strimzi-operator strimzi/strimzi-kafka-operator \
+		--namespace medisupply \
+		--wait
+
 	@echo ""
 	@echo "🎉 ¡Despliegue completado exitosamente!"
 	@echo "📋 Servicios desplegados:"
@@ -155,6 +160,7 @@ deploy:
 	@echo "  ✅ RabbitMQ"
 	@echo "  ✅ MQTT Event Generator"
 	@echo "  ✅ MQTT-Kafka Bridge"
+	@echo "  ✅ Strimzi Operator"
 	@echo ""
 	@echo "💡 Para acceder a los dashboards:"
 	@echo "  make kafka-ui    # Kafka UI en http://localhost:9090"
@@ -176,6 +182,8 @@ clean: ## Eliminar charts del cluster
 	@helm uninstall kafka-ui --namespace medisupply || true
 	@echo "⚡ Eliminando Kafka..."
 	@helm uninstall kafka --namespace medisupply || true
+	@echo "⚡ Eliminando Strimzi..."
+	@helm uninstall strimzi-operator --namespace medisupply || true
 	@echo ""
 	@echo "🗑️  Eliminando namespace medisupply..."
 	@kubectl delete namespace medisupply --ignore-not-found=true
@@ -188,6 +196,7 @@ clean: ## Eliminar charts del cluster
 	@echo "  ❌ EMQX (MQTT Broker)"
 	@echo "  ❌ Kafka UI"
 	@echo "  ❌ Kafka"
+	@echo "  ❌ Strimzi"
 	@echo "  ❌ Namespace medisupply"
 
 destroy: ## Eliminar cluster completamente
