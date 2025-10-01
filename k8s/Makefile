@@ -22,7 +22,8 @@ help: ## Mostrar ayuda
 	@echo "  destroy                - Eliminar cluster completamente"
 	@echo ""
 	@echo "🔄 Arquitectura desplegada:"
-	@echo "  Flujo: MQTT → Kafka → RabbitMQ"
+	@echo "  Flujo Principal: MQTT → Kafka (Principal)"
+	@echo "  Cluster Adicional: Kafka Warehouse (independiente)"
 	@echo ""
 	@echo "Ejemplos:"
 	@echo "  make init              # Usa Kind por defecto"
@@ -116,15 +117,21 @@ deploy:
 	@kubectl create namespace medisupply --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace medisupply ya existe o fue creado"
 	@kubectl label namespace medisupply istio-injection=enabled
 
-	@echo "⚡ Desplegando Kafka..."
+	@echo "⚡ Desplegando Kafka (cluster principal)..."
 	@helm upgrade --install kafka ./kafka \
 		--namespace medisupply \
 		--values ./config/kafka-values.yaml \
 		--wait
 
+	@echo "⚡ Desplegando Kafka Warehouse (cluster secundario)..."
+	@helm upgrade --install kafka-warehouse ./kafka \
+		--namespace medisupply \
+		--values ./config/kafka-warehouse-values.yaml \
+		--wait
 
 
-	@echo "🖥️  Desplegando Kafka UI (cluster principal)..."
+
+	@echo "🖥️  Desplegando Kafka UI (ambos clusters)..."
 	@helm upgrade --install kafka-ui ./kafka-ui \
 		--namespace medisupply \
 		--wait
@@ -161,7 +168,7 @@ deploy:
 	@echo ""
 	@echo "🎉 ¡Despliegue completado exitosamente!"
 	@echo "📋 Servicios desplegados:"
-	@echo "  ✅ Kafka + Kafka UI"
+	@echo "  ✅ Kafka (Principal) + Kafka Warehouse + Kafka UI"
 	@echo "  ✅ EMQX (MQTT Broker)"
 	@echo "  ✅ RabbitMQ"
 	@echo "  ✅ MQTT Event Generator"
@@ -178,7 +185,7 @@ deploy:
 	@echo "     mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge → Kafka"
 	@echo ""
 	@echo "💡 Para acceder a los dashboards:"
-	@echo "  make kafka-ui    # Kafka UI en http://localhost:9090"
+	@echo "  make kafka-ui    # Kafka UI (ambos clusters) en http://localhost:9090"
 	@echo "  make mqtt        # EMQX en http://localhost:18083"
 	@echo "  make rabbitmq    # RabbitMQ en http://localhost:15672"
 	@echo ""
@@ -202,6 +209,8 @@ clean: ## Eliminar charts del cluster
 	@helm uninstall kafka-ui --namespace medisupply || true
 
 
+	@echo "⚡ Eliminando Kafka Warehouse..."
+	@helm uninstall kafka-warehouse --namespace medisupply || true
 	@echo "⚡ Eliminando Kafka..."
 	@helm uninstall kafka --namespace medisupply || true
 	@echo ""

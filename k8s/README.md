@@ -6,13 +6,18 @@ Infraestructura Kubernetes completa para el sistema MediSupply con arquitectura 
 
 ### Flujo Principal: MQTT → Kafka
 ```
-mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge → Kafka
+mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge → Kafka (Principal)
+```
+
+### Cluster Adicional: Kafka Warehouse
+```
+Kafka Warehouse (independiente para procesamiento de almacén)
 ```
 
 ## 🔧 Componentes Principales
 
 - **Istio Service Mesh**: Comunicación segura entre servicios
-- **Apache Kafka**: Sistema de mensajería central para eventos
+- **Apache Kafka**: Sistema de mensajería central para eventos (2 clusters: Principal y Warehouse)
 
 - **EMQX**: Broker MQTT para IoT y eventos en tiempo real
 - **RabbitMQ**: Sistema de colas para procesamiento asíncrono
@@ -89,7 +94,7 @@ make destroy                 # Eliminar cluster completamente
 
 | Servicio | URL | Descripción |
 |----------|-----|-------------|
-| Kafka UI | http://localhost:9090 | Interfaz de gestión de Kafka Central |
+| Kafka UI | http://localhost:9090 | Interfaz de gestión de ambos clusters Kafka |
 | Kafka Pedidos UI | http://localhost:9091 | Interfaz de gestión de Kafka Pedidos |
 | EMQX Dashboard | http://localhost:18083 | Gestión del broker MQTT |
 | RabbitMQ Management | http://localhost:15672 | Gestión de colas RabbitMQ |
@@ -125,9 +130,7 @@ k8s/
 │   ├── kind-config.yaml
 │   ├── minikube-config.yaml
 │   ├── kafka-values.yaml
-│   ├── kafka-pedidos-values.yaml
-│   ├── kafka-ui-pedidos-values.yaml
-│   └── strimzi-values.yaml
+│   └── kafka-warehouse-values.yaml
 ├── Makefile                  # Comandos de gestión
 └── README.md                 # Este archivo
 ```

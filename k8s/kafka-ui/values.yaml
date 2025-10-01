@@ -22,13 +22,21 @@ resources:
 
 kafka:
   clusters:
-    - name: local
+    - name: kafka-main
       bootstrapServers: kafka:9092
+    - name: kafka-warehouse
+      bootstrapServers: kafka-warehouse:9092
       
 env:
   - name: KAFKA_CLUSTERS_0_NAME
-    value: "local"
+    value: "kafka-main"
   - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
     value: "kafka:9092"
   - name: KAFKA_CLUSTERS_0_READONLY
+    value: "false"
+  - name: KAFKA_CLUSTERS_1_NAME
+    value: "kafka-warehouse"
+  - name: KAFKA_CLUSTERS_1_BOOTSTRAPSERVERS
+    value: "kafka-warehouse:9092"
+  - name: KAFKA_CLUSTERS_1_READONLY
     value: "false"
