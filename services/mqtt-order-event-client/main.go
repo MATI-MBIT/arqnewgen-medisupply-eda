@@ -102,7 +102,7 @@ func main() {
 	// MQTT Configuration
 	broker := getEnv("MQTT_BROKER", "tcp://localhost:1883")
 	clientID := getEnv("MQTT_CLIENT_ID", "order-event-client")
-	topic := getEnv("MQTT_TOPIC", "events/order-damage")
+	topic := getEnv("MQTT_TOPIC", "events/sensor")
 	username := getEnv("MQTT_USERNAME", "")
 	password := getEnv("MQTT_PASSWORD", "")
 
