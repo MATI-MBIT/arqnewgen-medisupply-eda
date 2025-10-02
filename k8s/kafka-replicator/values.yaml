@@ -1,0 +1,49 @@
+replicaCount: 1 # CRITICAL: Must be 1 to avoid duplicate processing
+
+image:
+  repository: python
+  tag: "3.11-slim"
+  pullPolicy: IfNotPresent
+
+# Source Kafka configuration
+sourceKafka:
+  bootstrapServers: "kafka:9092"
+
+# Target Kafka configuration
+targetKafka:
+  bootstrapServers: "kafka-warehouse:9092"
+
+# Consumer groups
+consumerGroup:
+  sourceToTarget: "kafka-replicator-s2t-v3"
+  targetToSource: "kafka-replicator-t2s-v3"
+
+# Replication configuration
+replication:
+  sourceToTarget:
+    enabled: true
+    topics:
+      - sourceTopicName: "events-order-damage"
+        targetTopicName: "warehouse-order-damage"
+      - sourceTopicName: "events-sensor"
+        targetTopicName: "warehouse-sensor"
+
+  targetToSource:
+    enabled: false
+    topics: []
+  #    - sourceTopicName: "events-order-damage"
+  #      targetTopicName: "events-order-damage"
+  #    - sourceTopicName: "events-sensor"
+  #      targetTopicName: "events-sensor"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

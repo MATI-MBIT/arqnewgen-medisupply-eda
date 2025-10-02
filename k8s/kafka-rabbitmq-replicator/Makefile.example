@@ -1,0 +1,36 @@
+# Ejemplo de comandos para agregar al Makefile principal
+
+# Agregar estas líneas al Makefile principal de k8s/
+
+kafka-rabbitmq-replicator: ## Desplegar replicador Kafka-RabbitMQ
+	@echo "🔄 Desplegando Kafka-RabbitMQ Replicator..."
+	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
+		--namespace default \
+		--create-namespace \
+		--wait \
+		--timeout=300s
+	@echo "✅ Kafka-RabbitMQ Replicator desplegado"
+	@echo "📊 Para ver logs:"
+	@echo "  kubectl logs -l component=kafka-to-rabbitmq -f"
+	@echo "  kubectl logs -l component=rabbitmq-to-kafka -f"
+
+kafka-rabbitmq-replicator-logs: ## Ver logs del replicador
+	@echo "📊 Logs de Kafka → RabbitMQ:"
+	@kubectl logs -l component=kafka-to-rabbitmq --tail=50
+	@echo ""
+	@echo "📊 Logs de RabbitMQ → Kafka:"
+	@kubectl logs -l component=rabbitmq-to-kafka --tail=50
+
+kafka-rabbitmq-replicator-status: ## Estado del replicador
+	@echo "📊 Estado de Kafka-RabbitMQ Replicator:"
+	@kubectl get pods -l app.kubernetes.io/name=kafka-rabbitmq-replicator
+	@echo ""
+	@kubectl get configmap -l app.kubernetes.io/name=kafka-rabbitmq-replicator
+
+kafka-rabbitmq-replicator-clean: ## Eliminar replicador
+	@echo "🗑️  Eliminando Kafka-RabbitMQ Replicator..."
+	@helm uninstall kafka-rabbitmq-replicator || true
+	@echo "✅ Kafka-RabbitMQ Replicator eliminado"
+
+# Agregar kafka-rabbitmq-replicator a la regla deploy:
+# deploy: istio kafka kafka-warehouse mqtt rabbitmq kafka-replicator kafka-rabbitmq-replicator kafka-ui mqtt-kafka-bridge mqtt-event-generator keda

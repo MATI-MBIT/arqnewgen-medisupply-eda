@@ -5,28 +5,38 @@ CLUSTER_NAME := local-k8s
 KUBECONFIG_PATH := ~/.kube/config
 PROVIDER := $(or $(PROVIDER),kind)
 
-.PHONY: help init deploy clean destroy kiali kafka-ui mqtt rabbitmq
+.PHONY: help init deploy clean destroy kiali kafka-ui mqtt rabbitmq kafka-rabbitmq-replicator kafka-rabbitmq-replicator-logs kafka-rabbitmq-replicator-status
 
 help: ## Mostrar ayuda
 	@echo "Comandos disponibles:"
 	@echo "  init PROVIDER=kind     - Crear cluster local con Kind (default)"
 	@echo "  init PROVIDER=minikube - Crear cluster local con Minikube"
-	@echo "  deploy                 - Desplegar Kafka, Kafka UI, EMQX, RabbitMQ y MQTT Event Generator"
+	@echo "  deploy                 - Desplegar toda la arquitectura EDA completa"
+	@echo "  status                 - Mostrar estado de todos los componentes"
 	@echo "  kiali                  - Abrir Kiali dashboard (requiere Istio)"
 	@echo "  kafka-ui               - Abrir Kafka UI dashboard"
+	@echo ""
 	@echo "  mqtt                   - Abrir EMQX dashboard"
 	@echo "  rabbitmq               - Abrir RabbitMQ Management UI"
 	@echo "  clean                  - Eliminar charts del cluster"
 	@echo "  destroy                - Eliminar cluster completamente"
 	@echo ""
+	@echo "🔄 Arquitectura desplegada:"
+	@echo "  Flujo Principal: MQTT → Kafka (Principal)"
+	@echo "  Cluster Adicional: Kafka Warehouse"
+	@echo "  Replicación Bidireccional:"
+	@echo "    • damage, events-sensor → Kafka Principal → Kafka Warehouse"
+	@echo "    • warehouse-events, inventory-updates ← Kafka Principal ← Kafka Warehouse"
+	@echo ""
 	@echo "Ejemplos:"
 	@echo "  make init              # Usa Kind por defecto"
-	@echo "  make init PROVIDER=kind"
-	@echo "  make init PROVIDER=minikube"
-	@echo "  make kiali             # Abrir Kiali dashboard"
+	@echo "  make deploy            # Despliega arquitectura completa"
+	@echo "  make status            # Ver estado de componentes"
 	@echo "  make kafka-ui          # Abrir Kafka UI dashboard"
 	@echo "  make mqtt              # Abrir EMQX dashboard"
 	@echo "  make rabbitmq          # Abrir RabbitMQ Management UI"
+	@echo "  kafka-rabbitmq-replicator-logs   # Ver logs del replicador Kafka-RabbitMQ"
+	@echo "  kafka-rabbitmq-replicator-status # Estado del replicador Kafka-RabbitMQ"
 
 init: ## Crear cluster local con Kind o Minikube
 	@echo "🚀 Creando cluster local con $(PROVIDER)..."
@@ -57,6 +67,11 @@ else
 	@exit 1
 endif
 	@echo "🎉 Cluster $(CLUSTER_NAME) con $(PROVIDER) listo!"
+
+ifeq ($(PROVIDER),kind)
+	@echo "🔨 Construyendo y cargando imágenes Docker en Kind..."
+	@$(MAKE) -C ../services build-load-all
+endif
 
 	@echo "📦 Desplegando charts en el cluster..."
 	@echo "🔧 Verificando que el cluster esté activo..."
@@ -111,16 +126,27 @@ endif
 deploy:
 	@kubectl create namespace medisupply --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace medisupply ya existe o fue creado"
 	@kubectl label namespace medisupply istio-injection=enabled
-	@echo "⚡ Desplegando Kafka..."
+
+	@echo "⚡ Desplegando Kafka (cluster principal)..."
 	@helm upgrade --install kafka ./kafka \
 		--namespace medisupply \
 		--values ./config/kafka-values.yaml \
 		--wait
 
-	@echo "🖥️  Desplegando Kafka UI..."
+	@echo "⚡ Desplegando Kafka Warehouse (cluster secundario)..."
+	@helm upgrade --install kafka-warehouse ./kafka \
+		--namespace medisupply \
+		--values ./config/kafka-warehouse-values.yaml \
+		--wait
+
+
+
+	@echo "🖥️  Desplegando Kafka UI (ambos clusters)..."
 	@helm upgrade --install kafka-ui ./kafka-ui \
 		--namespace medisupply \
 		--wait
+
+
 
 	@echo "📡 Desplegando MQTT (EMQX)..."
 	@helm upgrade --install emqx ./mqtt/emqx \
@@ -147,33 +173,74 @@ deploy:
 		--namespace medisupply \
 		--wait
 
+	@echo "🔄 Desplegando Kafka Replicator (replicación bidireccional)..."
+	@helm upgrade --install kafka-replicator ./kafka-replicator \
+		--namespace medisupply \
+		--wait
+
+	@echo "🔄 Desplegando Kafka-RabbitMQ Replicator (replicación bidireccional)..."
+	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
+		--namespace medisupply \
+		--wait
+
+
+
 	@echo ""
 	@echo "🎉 ¡Despliegue completado exitosamente!"
 	@echo "📋 Servicios desplegados:"
-	@echo "  ✅ Kafka + Kafka UI"
+	@echo "  ✅ Kafka (Principal) + Kafka Warehouse + Kafka UI"
 	@echo "  ✅ EMQX (MQTT Broker)"
 	@echo "  ✅ RabbitMQ"
 	@echo "  ✅ MQTT Event Generator"
+	@echo "  ✅ MQTT Order Event Client"
 	@echo "  ✅ MQTT-Kafka Bridge"
+	@echo "  ✅ Kafka Replicator (Replicación Bidireccional)"
+	@echo "  ✅ Kafka-RabbitMQ Replicator (Replicación Bidireccional)"
+	@echo "  ✅ Strimzi Operator"
+	@echo "  ✅ Kafka Pedidos (Cluster secundario)"
+	@echo "  ✅ Kafka Connect + RabbitMQ Connector"
+	@echo "  ✅ Kafka Replicator (Python-based)"
+	@echo ""
+	@echo ""
+	@echo "🔄 Flujos de datos configurados:"
+	@echo "  📡 MQTT → Kafka:"
+	@echo "     mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge → Kafka"
+	@echo "  🔄 Replicación Bidireccional (Kafka Replicator):"
+	@echo "     Kafka ⟷ Kafka Warehouse (topics configurables por dirección)"
+	@echo "  🔄 Replicación Bidireccional (Kafka-RabbitMQ Replicator):"
+	@echo "     Kafka ⟷ RabbitMQ (topics/queues configurables por dirección)"
 	@echo ""
 	@echo "💡 Para acceder a los dashboards:"
-	@echo "  make kafka-ui    # Kafka UI en http://localhost:9090"
+	@echo "  make kafka-ui    # Kafka UI (ambos clusters) en http://localhost:9090"
 	@echo "  make mqtt        # EMQX en http://localhost:18083"
 	@echo "  make rabbitmq    # RabbitMQ en http://localhost:15672"
+	@echo ""
 
 clean: ## Eliminar charts del cluster
 	@echo "🧹 Eliminando charts del cluster..."
 	@echo ""
 	@echo "📊 Eliminando MQTT Event Generator..."
 	@helm uninstall mqtt-event-generator --namespace medisupply || true
+
+	@echo "🔄 Eliminando Kafka Replicator..."
+	@helm uninstall kafka-replicator --namespace medisupply || true
+	@echo "🔄 Eliminando Kafka-RabbitMQ Replicator..."
+	@helm uninstall kafka-rabbitmq-replicator --namespace medisupply || true
 	@echo "🔗 Eliminando MQTT-Kafka Bridge..."
 	@helm uninstall mqtt-kafka-bridge --namespace medisupply || true
+	@echo "📊 Eliminando MQTT Order Event Client..."
+	@helm uninstall mqtt-order-event-client --namespace medisupply || true
 	@echo "🐰 Eliminando RabbitMQ..."
 	@helm uninstall rabbitmq --namespace medisupply || true
 	@echo "📡 Eliminando EMQX..."
 	@helm uninstall emqx --namespace medisupply || true
+
 	@echo "🖥️  Eliminando Kafka UI..."
 	@helm uninstall kafka-ui --namespace medisupply || true
+
+
+	@echo "⚡ Eliminando Kafka Warehouse..."
+	@helm uninstall kafka-warehouse --namespace medisupply || true
 	@echo "⚡ Eliminando Kafka..."
 	@helm uninstall kafka --namespace medisupply || true
 	@echo ""
@@ -183,11 +250,17 @@ clean: ## Eliminar charts del cluster
 	@echo "✅ Todos los charts eliminados del cluster!"
 	@echo "📋 Servicios eliminados:"
 	@echo "  ❌ MQTT Event Generator"
-	@echo "  ❌ Kafka Connect"
+	@echo "  ❌ MQTT Order Event Client"
+	@echo "  ❌ MQTT-Kafka Bridge"
 	@echo "  ❌ RabbitMQ"
 	@echo "  ❌ EMQX (MQTT Broker)"
 	@echo "  ❌ Kafka UI"
 	@echo "  ❌ Kafka"
+	@echo "  ❌ Kafka Pedidos"
+	@echo "  ❌ Kafka Connect + Conectores"
+	@echo "  ❌ Kafka Replicator"
+	@echo "  ❌ Kafka-RabbitMQ Replicator"
+	@echo "  ❌ Strimzi Operator"
 	@echo "  ❌ Namespace medisupply"
 
 destroy: ## Eliminar cluster completamente
@@ -244,3 +317,49 @@ kiali: ## Abrir Kiali dashboard
 	@sleep 3
 	@echo "🌐 Kiali disponible en: http://localhost:20001"
 	@echo "💡 Presiona Ctrl+C para detener el port-forward"
+
+
+
+status: ## Mostrar estado de todos los componentes
+	@echo "📊 Estado de los componentes del sistema:"
+	@echo ""
+	@echo "🔍 Pods en namespace medisupply:"
+	@kubectl get pods -n medisupply -o wide || echo "❌ Error obteniendo pods"
+	@echo ""
+	@echo "🔍 Recursos de Strimzi:"
+	@kubectl get kafka,kafkaconnect,kafkamirrormaker2,kafkatopic,kafkaconnector -n medisupply || echo "❌ Error obteniendo recursos Strimzi"
+	@echo ""
+	@echo "🔍 Servicios:"
+	@kubectl get svc -n medisupply || echo "❌ Error obteniendo servicios"
+
+kafka-rabbitmq-replicator: ## Desplegar solo el replicador Kafka-RabbitMQ
+	@echo "🔄 Desplegando Kafka-RabbitMQ Replicator..."
+	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
+		--namespace medisupply \
+		--create-namespace \
+		--wait \
+		--timeout=300s
+	@echo "✅ Kafka-RabbitMQ Replicator desplegado"
+	@echo "📊 Para ver logs:"
+	@echo "  make kafka-rabbitmq-replicator-logs"
+
+kafka-rabbitmq-replicator-logs: ## Ver logs del replicador Kafka-RabbitMQ
+	@echo "📊 Logs de Kafka → RabbitMQ:"
+	@kubectl logs -l component=kafka-to-rabbitmq -n medisupply --tail=50 || echo "❌ No hay pods K2R ejecutándose"
+	@echo ""
+	@echo "📊 Logs de RabbitMQ → Kafka:"
+	@kubectl logs -l component=rabbitmq-to-kafka -n medisupply --tail=50 || echo "❌ No hay pods R2K ejecutándose"
+	@echo ""
+	@echo "💡 Para seguir logs en tiempo real:"
+	@echo "  kubectl logs -l component=kafka-to-rabbitmq -n medisupply -f"
+	@echo "  kubectl logs -l component=rabbitmq-to-kafka -n medisupply -f"
+
+kafka-rabbitmq-replicator-status: ## Estado del replicador Kafka-RabbitMQ
+	@echo "📊 Estado de Kafka-RabbitMQ Replicator:"
+	@kubectl get pods -l app.kubernetes.io/name=kafka-rabbitmq-replicator -n medisupply -o wide || echo "❌ No hay pods del replicador"
+	@echo ""
+	@echo "📋 ConfigMaps:"
+	@kubectl get configmap -l app.kubernetes.io/name=kafka-rabbitmq-replicator -n medisupply || echo "❌ No hay ConfigMaps del replicador"
+	@echo ""
+	@echo "📋 Deployments:"
+	@kubectl get deployment -l app.kubernetes.io/name=kafka-rabbitmq-replicator -n medisupply || echo "❌ No hay Deployments del replicador"

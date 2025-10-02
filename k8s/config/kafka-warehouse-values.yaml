@@ -1,0 +1,36 @@
+# Configuración para el cluster Kafka Warehouse
+controller:
+  replicaCount: 1
+
+# Usar la misma configuración de listeners que el Kafka principal
+listeners:
+  client:
+    protocol: PLAINTEXT
+  controller:
+    protocol: PLAINTEXT
+  interbroker:
+    protocol: PLAINTEXT
+
+auth:
+  clientProtocol: plaintext
+  interBrokerProtocol: plaintext
+  sasl:
+    enabledMechanisms: ""
+
+persistence:
+  enabled: false
+
+metrics:
+  jmx:
+    enabled: false
+  serviceMonitor:
+    enabled: false
+
+# Configuración de nombre para evitar conflictos con el Kafka principal
+nameOverride: "kafka-warehouse"
+fullnameOverride: "kafka-warehouse"
+
+# Labels para identificación
+commonLabels:
+  app.kubernetes.io/instance: kafka-warehouse
+  app.kubernetes.io/component: kafka-warehouse

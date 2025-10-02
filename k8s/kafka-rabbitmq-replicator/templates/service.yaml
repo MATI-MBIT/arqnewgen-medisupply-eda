@@ -1,0 +1,41 @@
+{{- if .Values.replication.kafkaToRabbitmq.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kafka-rabbitmq-replicator.fullname" . }}-k2r
+  labels:
+    {{- include "kafka-rabbitmq-replicator.labels" . | nindent 4 }}
+    component: kafka-to-rabbitmq
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "kafka-rabbitmq-replicator.selectorLabels" . | nindent 4 }}
+    {{- include "kafka-rabbitmq-replicator.istioLabels" . | nindent 4 }}
+    component: kafka-to-rabbitmq
+---
+{{- end }}
+{{- if .Values.replication.rabbitmqToKafka.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kafka-rabbitmq-replicator.fullname" . }}-r2k
+  labels:
+    {{- include "kafka-rabbitmq-replicator.labels" . | nindent 4 }}
+    component: rabbitmq-to-kafka
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "kafka-rabbitmq-replicator.selectorLabels" . | nindent 4 }}
+    {{- include "kafka-rabbitmq-replicator.istioLabels" . | nindent 4 }}
+    component: rabbitmq-to-kafka
+{{- end }}

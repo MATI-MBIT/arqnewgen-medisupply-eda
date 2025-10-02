@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kafka-rabbitmq-replicator.fullname" . }}-script
+  labels:
+    {{- include "kafka-rabbitmq-replicator.labels" . | nindent 4 }}
+data:
+  replicator.py: |
+{{ .Files.Get "scripts/replicator.py" | indent 4 }}
