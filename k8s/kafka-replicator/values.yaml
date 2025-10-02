@@ -11,7 +11,7 @@ sourceKafka:
 
 # Target Kafka configuration
 targetKafka:
-  bootstrapServers: "kafka-warehouse:9092"
+  bootstrapServers: "kafka-warehouse.mediwarehouse.svc.cluster.local:9092"
 
 # Consumer groups
 consumerGroup:

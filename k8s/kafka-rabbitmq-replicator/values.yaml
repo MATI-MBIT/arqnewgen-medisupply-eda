@@ -11,10 +11,11 @@ kafka:
 
 # RabbitMQ configuration
 rabbitmq:
-  host: "rabbitmq"
+  host: "rabbitmq.mediorder.svc.cluster.local"
   port: 5672
   username: "user"
   # Password will be read from Kubernetes secret
+  # Note: Secret must exist in the same namespace (medisupply) or be copied from mediorder namespace
   secretName: "rabbitmq"
   secretKey: "rabbitmq-password"
   vhost: "/"

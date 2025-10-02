@@ -13,7 +13,7 @@ fullnameOverride: ""
 # MQTT Configuration
 mqtt:
   # EMQX service name in the same namespace
-  broker: "tcp://emqx.medisupply.svc.cluster.local:1883"
+  broker: "tcp://emqx.medilogistic.svc.cluster.local:1883"
   clientId: "order-event-client"
   topic: "events/sensor"
   # Default EMQX credentials (should match emqx chart values)

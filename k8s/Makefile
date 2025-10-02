@@ -127,44 +127,56 @@ deploy:
 	@kubectl create namespace medisupply --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace medisupply ya existe o fue creado"
 	@kubectl label namespace medisupply istio-injection=enabled
 
+	@kubectl create namespace medilogistic --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace medilogistic ya existe o fue creado"
+	@kubectl label namespace medilogistic istio-injection=enabled
+
+	@kubectl create namespace mediorder --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace mediorder ya existe o fue creado"
+	@kubectl label namespace mediorder istio-injection=enabled
+
+	@kubectl create namespace mediwarehouse --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace mediwarehouse ya existe o fue creado"
+	@kubectl label namespace mediwarehouse istio-injection=enabled
+
+    # Logistic
+	@echo "📡 Desplegando MQTT (EMQX)..."
+	@helm upgrade --install emqx ./mqtt/emqx \
+		--namespace medilogistic \
+		--wait
+
+	@echo "📊 Desplegando MQTT Event Generator..."
+	@helm upgrade --install mqtt-event-generator ./mqtt-event-generator \
+		--namespace medilogistic \
+		--wait
+
+	@echo "📊 Desplegando MQTT Order Event Client..."
+	@helm upgrade --install mqtt-order-event-client ./mqtt-order-event-client \
+		--namespace medilogistic \
+		--wait
+
+    # Order
+	@echo "🐰 Desplegando RabbitMQ..."
+	@helm upgrade --install rabbitmq ./rabbitmq \
+		--namespace mediorder \
+		--wait
+
+	@echo "🐰 Copiar secreto de mediorder a medisupply"
+	@kubectl get secret rabbitmq -n mediorder -o yaml | sed 's/namespace: mediorder/namespace: medisupply/' | kubectl apply -f -
+
+    # Warehouse
+	@echo "⚡ Desplegando Kafka Warehouse (cluster secundario)..."
+	@helm upgrade --install kafka-warehouse ./kafka \
+		--namespace mediwarehouse \
+		--values ./config/kafka-warehouse-values.yaml \
+		--wait
+
+    # Medisupply - Main
 	@echo "⚡ Desplegando Kafka (cluster principal)..."
 	@helm upgrade --install kafka ./kafka \
 		--namespace medisupply \
 		--values ./config/kafka-values.yaml \
 		--wait
 
-	@echo "⚡ Desplegando Kafka Warehouse (cluster secundario)..."
-	@helm upgrade --install kafka-warehouse ./kafka \
-		--namespace medisupply \
-		--values ./config/kafka-warehouse-values.yaml \
-		--wait
-
-
-
 	@echo "🖥️  Desplegando Kafka UI (ambos clusters)..."
 	@helm upgrade --install kafka-ui ./kafka-ui \
-		--namespace medisupply \
-		--wait
-
-
-
-	@echo "📡 Desplegando MQTT (EMQX)..."
-	@helm upgrade --install emqx ./mqtt/emqx \
-		--namespace medisupply \
-		--wait
-
-	@echo "🐰 Desplegando RabbitMQ..."
-	@helm upgrade --install rabbitmq ./rabbitmq \
-		--namespace medisupply \
-		--wait
-
-	@echo "📊 Desplegando MQTT Event Generator..."
-	@helm upgrade --install mqtt-event-generator ./mqtt-event-generator \
-		--namespace medisupply \
-		--wait
-
-	@echo "📊 Desplegando MQTT Order Event Client..."
-	@helm upgrade --install mqtt-order-event-client ./mqtt-order-event-client \
 		--namespace medisupply \
 		--wait
 
@@ -173,7 +185,7 @@ deploy:
 		--namespace medisupply \
 		--wait
 
-	@echo "🔄 Desplegando Kafka Replicator (replicación bidireccional)..."
+	@echo "🔄 Desplegando Kafka-Kafka Replicator (replicación bidireccional)..."
 	@helm upgrade --install kafka-replicator ./kafka-replicator \
 		--namespace medisupply \
 		--wait
@@ -182,8 +194,6 @@ deploy:
 	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
 		--namespace medisupply \
 		--wait
-
-
 
 	@echo ""
 	@echo "🎉 ¡Despliegue completado exitosamente!"
@@ -219,33 +229,39 @@ deploy:
 clean: ## Eliminar charts del cluster
 	@echo "🧹 Eliminando charts del cluster..."
 	@echo ""
+    # Logistic
 	@echo "📊 Eliminando MQTT Event Generator..."
-	@helm uninstall mqtt-event-generator --namespace medisupply || true
+	@helm uninstall mqtt-event-generator --namespace medilogistic || true
+	@echo "📊 Eliminando MQTT Order Event Client..."
+	@helm uninstall mqtt-order-event-client --namespace medilogistic || true
+	@echo "📡 Eliminando EMQX..."
+	@helm uninstall emqx --namespace medilogistic || true
 
+    # Order
+	@echo "🐰 Eliminando RabbitMQ..."
+	@helm uninstall rabbitmq --namespace mediorder || true
+
+    # Warehouse
+	@helm uninstall kafka-warehouse --namespace mediwarehouse || true
+	@echo "⚡ Eliminando Kafka..."
+
+    # MediSupply
 	@echo "🔄 Eliminando Kafka Replicator..."
 	@helm uninstall kafka-replicator --namespace medisupply || true
 	@echo "🔄 Eliminando Kafka-RabbitMQ Replicator..."
 	@helm uninstall kafka-rabbitmq-replicator --namespace medisupply || true
 	@echo "🔗 Eliminando MQTT-Kafka Bridge..."
 	@helm uninstall mqtt-kafka-bridge --namespace medisupply || true
-	@echo "📊 Eliminando MQTT Order Event Client..."
-	@helm uninstall mqtt-order-event-client --namespace medisupply || true
-	@echo "🐰 Eliminando RabbitMQ..."
-	@helm uninstall rabbitmq --namespace medisupply || true
-	@echo "📡 Eliminando EMQX..."
-	@helm uninstall emqx --namespace medisupply || true
-
 	@echo "🖥️  Eliminando Kafka UI..."
 	@helm uninstall kafka-ui --namespace medisupply || true
-
-
 	@echo "⚡ Eliminando Kafka Warehouse..."
-	@helm uninstall kafka-warehouse --namespace medisupply || true
-	@echo "⚡ Eliminando Kafka..."
 	@helm uninstall kafka --namespace medisupply || true
 	@echo ""
 	@echo "🗑️  Eliminando namespace medisupply..."
 	@kubectl delete namespace medisupply --ignore-not-found=true
+	@kubectl delete namespace medilogistic --ignore-not-found=true
+	@kubectl delete namespace mediorder --ignore-not-found=true
+	@kubectl delete namespace mediwarehouse --ignore-not-found=true
 	@echo ""
 	@echo "✅ Todos los charts eliminados del cluster!"
 	@echo "📋 Servicios eliminados:"
@@ -262,6 +278,9 @@ clean: ## Eliminar charts del cluster
 	@echo "  ❌ Kafka-RabbitMQ Replicator"
 	@echo "  ❌ Strimzi Operator"
 	@echo "  ❌ Namespace medisupply"
+	@echo "  ❌ Namespace medilogistic"
+	@echo "  ❌ Namespace mediorder"
+	@echo "  ❌ Namespace mediwarehouse"
 
 destroy: ## Eliminar cluster completamente
 	@echo "💥 Eliminando cluster $(CLUSTER_NAME)..."
@@ -287,7 +306,7 @@ endif
 rabbitmq: ## Abrir RabbitMQ Management UI
 	@echo "🐰 Abriendo RabbitMQ Management UI..."
 	@echo "📡 Configurando port-forward para RabbitMQ..."
-	@kubectl port-forward -n medisupply svc/rabbitmq 15672:15672 &
+	@kubectl port-forward -n mediorder svc/rabbitmq 15672:15672 &
 	@sleep 3
 	@echo "🌐 RabbitMQ Management UI disponible en: http://localhost:15672"
 	@echo "💡 Usuario: user, Contraseña: $(shell kubectl get secret --namespace medisupply rabbitmq -o jsonpath="{.data.rabbitmq-password}" | base64 -d)"
@@ -296,7 +315,7 @@ rabbitmq: ## Abrir RabbitMQ Management UI
 mqtt: ## Abrir EMQX dashboard
 	@echo "📡 Abriendo EMQX dashboard..."
 	@echo "📡 Configurando port-forward para EMQX..."
-	@kubectl port-forward -n medisupply svc/emqx 18083:18083 &
+	@kubectl port-forward -n medilogistic svc/emqx 18083:18083 &
 	@sleep 3
 	@echo "🌐 EMQX disponible en: http://localhost:18083"
 	@echo "💡 Usuario: admin, Contraseña: public"
@@ -318,48 +337,29 @@ kiali: ## Abrir Kiali dashboard
 	@echo "🌐 Kiali disponible en: http://localhost:20001"
 	@echo "💡 Presiona Ctrl+C para detener el port-forward"
 
-
-
 status: ## Mostrar estado de todos los componentes
 	@echo "📊 Estado de los componentes del sistema:"
 	@echo ""
 	@echo "🔍 Pods en namespace medisupply:"
 	@kubectl get pods -n medisupply -o wide || echo "❌ Error obteniendo pods"
 	@echo ""
-	@echo "🔍 Recursos de Strimzi:"
-	@kubectl get kafka,kafkaconnect,kafkamirrormaker2,kafkatopic,kafkaconnector -n medisupply || echo "❌ Error obteniendo recursos Strimzi"
+	@echo "🔍 Pods en namespace medilogictic:"
+	@kubectl get pods -n medilogistic -o wide || echo "❌ Error obteniendo pods"
 	@echo ""
-	@echo "🔍 Servicios:"
+	@echo "🔍 Pods en namespace mediorder:"
+	@kubectl get pods -n mediorder -o wide || echo "❌ Error obteniendo pods"
+	@echo ""
+	@echo "🔍 Pods en namespace mediwarehouse:"
+	@kubectl get pods -n mediwarehouse -o wide || echo "❌ Error obteniendo pods"
+	@echo ""
+	@echo "🔍 Servicios medisupply:"
 	@kubectl get svc -n medisupply || echo "❌ Error obteniendo servicios"
-
-kafka-rabbitmq-replicator: ## Desplegar solo el replicador Kafka-RabbitMQ
-	@echo "🔄 Desplegando Kafka-RabbitMQ Replicator..."
-	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
-		--namespace medisupply \
-		--create-namespace \
-		--wait \
-		--timeout=300s
-	@echo "✅ Kafka-RabbitMQ Replicator desplegado"
-	@echo "📊 Para ver logs:"
-	@echo "  make kafka-rabbitmq-replicator-logs"
-
-kafka-rabbitmq-replicator-logs: ## Ver logs del replicador Kafka-RabbitMQ
-	@echo "📊 Logs de Kafka → RabbitMQ:"
-	@kubectl logs -l component=kafka-to-rabbitmq -n medisupply --tail=50 || echo "❌ No hay pods K2R ejecutándose"
 	@echo ""
-	@echo "📊 Logs de RabbitMQ → Kafka:"
-	@kubectl logs -l component=rabbitmq-to-kafka -n medisupply --tail=50 || echo "❌ No hay pods R2K ejecutándose"
+	@echo "🔍 Servicios medilogistic:"
+	@kubectl get svc -n medilogistic || echo "❌ Error obteniendo servicios"
 	@echo ""
-	@echo "💡 Para seguir logs en tiempo real:"
-	@echo "  kubectl logs -l component=kafka-to-rabbitmq -n medisupply -f"
-	@echo "  kubectl logs -l component=rabbitmq-to-kafka -n medisupply -f"
-
-kafka-rabbitmq-replicator-status: ## Estado del replicador Kafka-RabbitMQ
-	@echo "📊 Estado de Kafka-RabbitMQ Replicator:"
-	@kubectl get pods -l app.kubernetes.io/name=kafka-rabbitmq-replicator -n medisupply -o wide || echo "❌ No hay pods del replicador"
+	@echo "🔍 Servicios mediorder:"
+	@kubectl get svc -n mediorder || echo "❌ Error obteniendo servicios"
 	@echo ""
-	@echo "📋 ConfigMaps:"
-	@kubectl get configmap -l app.kubernetes.io/name=kafka-rabbitmq-replicator -n medisupply || echo "❌ No hay ConfigMaps del replicador"
-	@echo ""
-	@echo "📋 Deployments:"
-	@kubectl get deployment -l app.kubernetes.io/name=kafka-rabbitmq-replicator -n medisupply || echo "❌ No hay Deployments del replicador"
+	@echo "🔍 Servicios mediwarehouse:"
+	@kubectl get svc -n mediwarehouse || echo "❌ Error obteniendo servicios"
