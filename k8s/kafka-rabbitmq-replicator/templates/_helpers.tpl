@@ -49,3 +49,11 @@ Selector labels
 app.kubernetes.io/name: {{ include "kafka-rabbitmq-replicator.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Istio labels
+*/}}
+{{- define "kafka-rabbitmq-replicator.istioLabels" -}}
+app: kafka-rabbitmq-replicator
+version: v1
+{{- end }}

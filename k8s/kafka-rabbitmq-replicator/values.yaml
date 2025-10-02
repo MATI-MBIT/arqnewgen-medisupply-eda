@@ -1,4 +1,4 @@
-replicaCount: 1  # CRITICAL: Must be 1 to avoid duplicate processing
+replicaCount: 1 # CRITICAL: Must be 1 to avoid duplicate processing
 
 image:
   repository: python
@@ -9,17 +9,19 @@ image:
 kafka:
   bootstrapServers: "kafka:9092"
 
-# RabbitMQ configuration  
+# RabbitMQ configuration
 rabbitmq:
   host: "rabbitmq"
   port: 5672
   username: "user"
-  password: "password"
+  # Password will be read from Kubernetes secret
+  secretName: "rabbitmq"
+  secretKey: "rabbitmq-password"
   vhost: "/"
 
-# Consumer groups
+# Consumer groups (only needed for R2K, K2R uses manual assignment)
 consumerGroup:
-  kafkaToRabbitmq: "kafka-rabbitmq-replicator-k2r"
+  # kafkaToRabbitmq: not needed (uses manual assignment)
   rabbitmqToKafka: "kafka-rabbitmq-replicator-r2k"
 
 # Replication configuration
@@ -35,7 +37,7 @@ replication:
         rabbitmqQueue: "sensor-queue"
         rabbitmqExchange: "events"
         rabbitmqRoutingKey: "sensor.data"
-  
+
   rabbitmqToKafka:
     enabled: false
     mappings: []
@@ -59,9 +61,16 @@ affinity: {}
 # Logging configuration
 logging:
   level: INFO
-  
+
 # Health check configuration
 healthCheck:
   enabled: true
   initialDelaySeconds: 30
   periodSeconds: 10
+
+# Istio configuration
+istio:
+  enabled: true
+  labels:
+    app: kafka-rabbitmq-replicator
+    version: v1

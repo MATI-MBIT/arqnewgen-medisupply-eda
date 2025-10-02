@@ -10,11 +10,13 @@ import os
 import sys
 import traceback
 import signal
+import threading
 from typing import Dict, Set, Optional, List
 from kafka import KafkaConsumer, KafkaProducer, TopicPartition
 from kafka.errors import KafkaError, NoBrokersAvailable
 import pika
 from pika.exceptions import AMQPConnectionError, AMQPChannelError
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 class KafkaRabbitMQReplicator:
     def __init__(self, direction="K2R"):
@@ -40,6 +42,9 @@ class KafkaRabbitMQReplicator:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
+        # Start health check server
+        self._start_health_server()
+        
     def setup_logging(self):
         """Setup structured logging"""
         logging.basicConfig(
@@ -54,6 +59,45 @@ class KafkaRabbitMQReplicator:
         self.logger.info(f"Received signal {signum}, initiating graceful shutdown...")
         self.shutdown_requested = True
         
+    def _start_health_server(self):
+        """Start HTTP health check server"""
+        class HealthHandler(BaseHTTPRequestHandler):
+            def __init__(self, replicator, *args, **kwargs):
+                self.replicator = replicator
+                super().__init__(*args, **kwargs)
+                
+            def do_GET(self):
+                if self.path == '/health':
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    health_data = {
+                        'status': 'healthy',
+                        'direction': self.replicator.direction,
+                        'messages_processed': self.replicator.message_count,
+                        'errors': self.replicator.error_count,
+                        'uptime': time.time() - self.replicator.start_time
+                    }
+                    self.wfile.write(json.dumps(health_data).encode())
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+                    
+            def log_message(self, format, *args):
+                # Suppress HTTP server logs
+                pass
+        
+        def handler(*args, **kwargs):
+            HealthHandler(self, *args, **kwargs)
+            
+        try:
+            server = HTTPServer(('0.0.0.0', 8080), handler)
+            health_thread = threading.Thread(target=server.serve_forever, daemon=True)
+            health_thread.start()
+            self.logger.info("Health check server started on port 8080")
+        except Exception as e:
+            self.logger.warning(f"Could not start health server: {e}")
+        
     def load_config(self):
         """Load and validate configuration from environment"""
         self.logger.info(f"=== {self.direction} REPLICATOR STARTING ===")
@@ -66,11 +110,11 @@ class KafkaRabbitMQReplicator:
         self.rabbitmq_password = os.getenv('RABBITMQ_PASSWORD', 'password')
         self.rabbitmq_vhost = os.getenv('RABBITMQ_VHOST', '/')
         
-        # Consumer group
-        if self.direction == "K2R":
-            self.consumer_group = os.getenv('CONSUMER_GROUP', 'kafka-rabbitmq-replicator-k2r')
-        else:
+        # Consumer group (only needed for R2K direction)
+        if self.direction == "R2K":
             self.consumer_group = os.getenv('CONSUMER_GROUP', 'kafka-rabbitmq-replicator-r2k')
+        else:
+            self.consumer_group = None  # K2R uses manual assignment
         
         # Load mappings
         mappings_str = os.getenv('REPLICATION_MAPPINGS', '[]')
@@ -78,7 +122,10 @@ class KafkaRabbitMQReplicator:
         self.logger.info(f"KAFKA_BOOTSTRAP_SERVERS: {self.kafka_servers}")
         self.logger.info(f"RABBITMQ_HOST: {self.rabbitmq_host}:{self.rabbitmq_port}")
         self.logger.info(f"RABBITMQ_VHOST: {self.rabbitmq_vhost}")
-        self.logger.info(f"CONSUMER_GROUP: {self.consumer_group}")
+        if self.consumer_group:
+            self.logger.info(f"CONSUMER_GROUP: {self.consumer_group}")
+        else:
+            self.logger.info("CONSUMER_GROUP: None (using manual assignment)")
         self.logger.info(f"REPLICATION_MAPPINGS: {mappings_str}")
         
         # Parse mappings
@@ -99,7 +146,7 @@ class KafkaRabbitMQReplicator:
             self.logger.info(f"Mapping {i+1}: {mapping}")
             
     def create_kafka_consumer(self):
-        """Create Kafka consumer for K2R direction"""
+        """Create Kafka consumer for K2R direction without consumer group"""
         if self.direction != "K2R":
             return None
             
@@ -115,10 +162,10 @@ class KafkaRabbitMQReplicator:
             try:
                 self.logger.info(f"Kafka consumer creation attempt {attempt + 1}/{max_retries}")
                 
+                # Create consumer WITHOUT consumer group
                 consumer = KafkaConsumer(
-                    *kafka_topics,
                     bootstrap_servers=self.kafka_servers,
-                    group_id=self.consumer_group,
+                    # NO group_id - this is key!
                     
                     # Deserialization
                     value_deserializer=lambda m: m if m is None else m,
@@ -126,8 +173,7 @@ class KafkaRabbitMQReplicator:
                     
                     # Offset management
                     auto_offset_reset='latest',
-                    enable_auto_commit=True,
-                    auto_commit_interval_ms=1000,
+                    enable_auto_commit=False,  # No auto commit without group
                     
                     # Timeouts
                     consumer_timeout_ms=None,
@@ -143,6 +189,29 @@ class KafkaRabbitMQReplicator:
                 )
                 
                 self.logger.info("✅ Kafka consumer created successfully")
+                
+                # Manual assignment - simple approach like your original
+                self.logger.info("Using manual partition assignment...")
+                
+                partitions = []
+                for topic in kafka_topics:
+                    # Simple approach: assign partition 0 for each topic
+                    tp = TopicPartition(topic, 0)
+                    partitions.append(tp)
+                    self.logger.info(f"Will assign: {tp}")
+                
+                # Direct assignment
+                consumer.assign(partitions)
+                assignment = consumer.assignment()
+                self.logger.info(f"✅ Manual assignment successful: {assignment}")
+                
+                # Seek to beginning to process all available messages
+                self.logger.info("Seeking to beginning to process all messages...")
+                consumer.seek_to_beginning()
+                
+                # Consumer setup complete
+                self.logger.info("Consumer setup complete, starting main loop...")
+                
                 return consumer
                 
             except Exception as e:
@@ -301,8 +370,9 @@ class KafkaRabbitMQReplicator:
                     self.logger.info(f"✅ Bound queue {queue} to exchange {exchange} with routing key {routing_key}")
                     
             except Exception as e:
-                self.logger.error(f"❌ Failed to setup queue {queue}: {e}")    def 
-process_kafka_message(self, message):
+                self.logger.error(f"❌ Failed to setup queue {queue}: {e}")
+                
+    def process_kafka_message(self, message):
         """Process message from Kafka to RabbitMQ"""
         try:
             # Find mapping for this topic

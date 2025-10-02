@@ -11,11 +11,13 @@ spec:
   selector:
     matchLabels:
       {{- include "kafka-rabbitmq-replicator.selectorLabels" . | nindent 6 }}
+      {{- include "kafka-rabbitmq-replicator.istioLabels" . | nindent 6 }}
       component: kafka-to-rabbitmq
   template:
     metadata:
       labels:
         {{- include "kafka-rabbitmq-replicator.selectorLabels" . | nindent 8 }}
+        {{- include "kafka-rabbitmq-replicator.istioLabels" . | nindent 8 }}
         component: kafka-to-rabbitmq
     spec:
       containers:
@@ -38,13 +40,19 @@ spec:
         - name: RABBITMQ_USERNAME
           value: {{ .Values.rabbitmq.username | quote }}
         - name: RABBITMQ_PASSWORD
-          value: {{ .Values.rabbitmq.password | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.rabbitmq.secretName | default "rabbitmq" }}
+              key: {{ .Values.rabbitmq.secretKey | default "rabbitmq-password" }}
         - name: RABBITMQ_VHOST
           value: {{ .Values.rabbitmq.vhost | quote }}
-        - name: CONSUMER_GROUP
-          value: {{ .Values.consumerGroup.kafkaToRabbitmq | quote }}
+        # Consumer group not needed for K2R (manual assignment)
         - name: REPLICATION_MAPPINGS
           value: {{ .Values.replication.kafkaToRabbitmq.mappings | toJson | quote }}
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
         volumeMounts:
         - name: script
           mountPath: /app
@@ -52,19 +60,15 @@ spec:
           {{- toYaml .Values.resources | nindent 10 }}
         {{- if .Values.healthCheck.enabled }}
         livenessProbe:
-          exec:
-            command:
-            - /bin/bash
-            - -c
-            - "ps aux | grep -v grep | grep replicator.py"
+          httpGet:
+            path: /health
+            port: 8080
           initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
           periodSeconds: {{ .Values.healthCheck.periodSeconds }}
         readinessProbe:
-          exec:
-            command:
-            - /bin/bash
-            - -c
-            - "ps aux | grep -v grep | grep replicator.py"
+          httpGet:
+            path: /health
+            port: 8080
           initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
           periodSeconds: {{ .Values.healthCheck.periodSeconds }}
         {{- end }}
@@ -100,11 +104,13 @@ spec:
   selector:
     matchLabels:
       {{- include "kafka-rabbitmq-replicator.selectorLabels" . | nindent 6 }}
+      {{- include "kafka-rabbitmq-replicator.istioLabels" . | nindent 6 }}
       component: rabbitmq-to-kafka
   template:
     metadata:
       labels:
         {{- include "kafka-rabbitmq-replicator.selectorLabels" . | nindent 8 }}
+        {{- include "kafka-rabbitmq-replicator.istioLabels" . | nindent 8 }}
         component: rabbitmq-to-kafka
     spec:
       containers:
@@ -127,13 +133,20 @@ spec:
         - name: RABBITMQ_USERNAME
           value: {{ .Values.rabbitmq.username | quote }}
         - name: RABBITMQ_PASSWORD
-          value: {{ .Values.rabbitmq.password | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.rabbitmq.secretName | default "rabbitmq" }}
+              key: {{ .Values.rabbitmq.secretKey | default "rabbitmq-password" }}
         - name: RABBITMQ_VHOST
           value: {{ .Values.rabbitmq.vhost | quote }}
         - name: CONSUMER_GROUP
           value: {{ .Values.consumerGroup.rabbitmqToKafka | quote }}
         - name: REPLICATION_MAPPINGS
           value: {{ .Values.replication.rabbitmqToKafka.mappings | toJson | quote }}
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
         volumeMounts:
         - name: script
           mountPath: /app
@@ -141,19 +154,15 @@ spec:
           {{- toYaml .Values.resources | nindent 10 }}
         {{- if .Values.healthCheck.enabled }}
         livenessProbe:
-          exec:
-            command:
-            - /bin/bash
-            - -c
-            - "ps aux | grep -v grep | grep replicator.py"
+          httpGet:
+            path: /health
+            port: 8080
           initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
           periodSeconds: {{ .Values.healthCheck.periodSeconds }}
         readinessProbe:
-          exec:
-            command:
-            - /bin/bash
-            - -c
-            - "ps aux | grep -v grep | grep replicator.py"
+          httpGet:
+            path: /health
+            port: 8080
           initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
           periodSeconds: {{ .Values.healthCheck.periodSeconds }}
         {{- end }}

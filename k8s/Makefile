@@ -5,7 +5,7 @@ CLUSTER_NAME := local-k8s
 KUBECONFIG_PATH := ~/.kube/config
 PROVIDER := $(or $(PROVIDER),kind)
 
-.PHONY: help init deploy clean destroy kiali kafka-ui mqtt rabbitmq
+.PHONY: help init deploy clean destroy kiali kafka-ui mqtt rabbitmq kafka-rabbitmq-replicator kafka-rabbitmq-replicator-logs kafka-rabbitmq-replicator-status
 
 help: ## Mostrar ayuda
 	@echo "Comandos disponibles:"
@@ -35,6 +35,8 @@ help: ## Mostrar ayuda
 	@echo "  make kafka-ui          # Abrir Kafka UI dashboard"
 	@echo "  make mqtt              # Abrir EMQX dashboard"
 	@echo "  make rabbitmq          # Abrir RabbitMQ Management UI"
+	@echo "  kafka-rabbitmq-replicator-logs   # Ver logs del replicador Kafka-RabbitMQ"
+	@echo "  kafka-rabbitmq-replicator-status # Estado del replicador Kafka-RabbitMQ"
 
 init: ## Crear cluster local con Kind o Minikube
 	@echo "🚀 Creando cluster local con $(PROVIDER)..."
@@ -171,6 +173,11 @@ deploy:
 		--namespace medisupply \
 		--wait
 
+	@echo "🔄 Desplegando Kafka-RabbitMQ Replicator (replicación bidireccional)..."
+	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
+		--namespace medisupply \
+		--wait
+
 
 
 	@echo ""
@@ -183,6 +190,7 @@ deploy:
 	@echo "  ✅ MQTT Order Event Client"
 	@echo "  ✅ MQTT-Kafka Bridge"
 	@echo "  ✅ Kafka Replicator (Replicación Bidireccional)"
+	@echo "  ✅ Kafka-RabbitMQ Replicator (Replicación Bidireccional)"
 	@echo "  ✅ Strimzi Operator"
 	@echo "  ✅ Kafka Pedidos (Cluster secundario)"
 	@echo "  ✅ Kafka Connect + RabbitMQ Connector"
@@ -194,6 +202,8 @@ deploy:
 	@echo "     mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge → Kafka"
 	@echo "  🔄 Replicación Bidireccional (Kafka Replicator):"
 	@echo "     Kafka ⟷ Kafka Warehouse (topics configurables por dirección)"
+	@echo "  🔄 Replicación Bidireccional (Kafka-RabbitMQ Replicator):"
+	@echo "     Kafka ⟷ RabbitMQ (topics/queues configurables por dirección)"
 	@echo ""
 	@echo "💡 Para acceder a los dashboards:"
 	@echo "  make kafka-ui    # Kafka UI (ambos clusters) en http://localhost:9090"
@@ -209,6 +219,8 @@ clean: ## Eliminar charts del cluster
 
 	@echo "🔄 Eliminando Kafka Replicator..."
 	@helm uninstall kafka-replicator --namespace medisupply || true
+	@echo "🔄 Eliminando Kafka-RabbitMQ Replicator..."
+	@helm uninstall kafka-rabbitmq-replicator --namespace medisupply || true
 	@echo "🔗 Eliminando MQTT-Kafka Bridge..."
 	@helm uninstall mqtt-kafka-bridge --namespace medisupply || true
 	@echo "📊 Eliminando MQTT Order Event Client..."
@@ -242,6 +254,7 @@ clean: ## Eliminar charts del cluster
 	@echo "  ❌ Kafka Pedidos"
 	@echo "  ❌ Kafka Connect + Conectores"
 	@echo "  ❌ Kafka Replicator"
+	@echo "  ❌ Kafka-RabbitMQ Replicator"
 	@echo "  ❌ Strimzi Operator"
 	@echo "  ❌ Namespace medisupply"
 
@@ -313,3 +326,35 @@ status: ## Mostrar estado de todos los componentes
 	@echo ""
 	@echo "🔍 Servicios:"
 	@kubectl get svc -n medisupply || echo "❌ Error obteniendo servicios"
+
+kafka-rabbitmq-replicator: ## Desplegar solo el replicador Kafka-RabbitMQ
+	@echo "🔄 Desplegando Kafka-RabbitMQ Replicator..."
+	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
+		--namespace medisupply \
+		--create-namespace \
+		--wait \
+		--timeout=300s
+	@echo "✅ Kafka-RabbitMQ Replicator desplegado"
+	@echo "📊 Para ver logs:"
+	@echo "  make kafka-rabbitmq-replicator-logs"
+
+kafka-rabbitmq-replicator-logs: ## Ver logs del replicador Kafka-RabbitMQ
+	@echo "📊 Logs de Kafka → RabbitMQ:"
+	@kubectl logs -l component=kafka-to-rabbitmq -n medisupply --tail=50 || echo "❌ No hay pods K2R ejecutándose"
+	@echo ""
+	@echo "📊 Logs de RabbitMQ → Kafka:"
+	@kubectl logs -l component=rabbitmq-to-kafka -n medisupply --tail=50 || echo "❌ No hay pods R2K ejecutándose"
+	@echo ""
+	@echo "💡 Para seguir logs en tiempo real:"
+	@echo "  kubectl logs -l component=kafka-to-rabbitmq -n medisupply -f"
+	@echo "  kubectl logs -l component=rabbitmq-to-kafka -n medisupply -f"
+
+kafka-rabbitmq-replicator-status: ## Estado del replicador Kafka-RabbitMQ
+	@echo "📊 Estado de Kafka-RabbitMQ Replicator:"
+	@kubectl get pods -l app.kubernetes.io/name=kafka-rabbitmq-replicator -n medisupply -o wide || echo "❌ No hay pods del replicador"
+	@echo ""
+	@echo "📋 ConfigMaps:"
+	@kubectl get configmap -l app.kubernetes.io/name=kafka-rabbitmq-replicator -n medisupply || echo "❌ No hay ConfigMaps del replicador"
+	@echo ""
+	@echo "📋 Deployments:"
+	@kubectl get deployment -l app.kubernetes.io/name=kafka-rabbitmq-replicator -n medisupply || echo "❌ No hay Deployments del replicador"
