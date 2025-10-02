@@ -9,15 +9,18 @@ Infraestructura Kubernetes completa para el sistema MediSupply con arquitectura 
 mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge → Kafka (Principal)
 ```
 
-### Cluster Adicional: Kafka Warehouse
+### Replicación Bidireccional: MirrorMaker 2
 ```
-Kafka Warehouse (independiente para procesamiento de almacén)
+Kafka Principal ⟷ Kafka Warehouse
+├── damage, events-sensor → (Principal → Warehouse)
+└── new, inventory-updates ← (Principal ← Warehouse)
 ```
 
 ## 🔧 Componentes Principales
 
 - **Istio Service Mesh**: Comunicación segura entre servicios
 - **Apache Kafka**: Sistema de mensajería central para eventos (2 clusters: Principal y Warehouse)
+- **MirrorMaker 2**: Replicación bidireccional parametrizable por topic entre clusters
 
 - **EMQX**: Broker MQTT para IoT y eventos en tiempo real
 - **RabbitMQ**: Sistema de colas para procesamiento asíncrono
@@ -126,11 +129,16 @@ k8s/
 │   ├── rabbitmq-credentials-secret.yaml
 │   └── README.md
 ├── keda/                     # Chart de KEDA
+├── kafka-mirror-maker2/      # Chart de MirrorMaker 2
+│   ├── Chart.yaml
+│   ├── values.yaml
+│   └── templates/
 ├── config/                   # Configuraciones
 │   ├── kind-config.yaml
 │   ├── minikube-config.yaml
 │   ├── kafka-values.yaml
-│   └── kafka-warehouse-values.yaml
+│   ├── kafka-warehouse-values.yaml
+│   └── mirror-maker2-values.yaml
 ├── Makefile                  # Comandos de gestión
 └── README.md                 # Este archivo
 ```

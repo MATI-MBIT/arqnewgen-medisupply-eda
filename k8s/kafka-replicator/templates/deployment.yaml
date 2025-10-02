@@ -1,0 +1,215 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kafka-replicator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kafka-replicator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kafka-replicator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kafka-replicator.selectorLabels" . | nindent 8 }}
+        app: kafka-replicator
+        version: v1
+    spec:
+      restartPolicy: Always
+      
+      initContainers:
+      - name: install-deps
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command:
+        - sh
+        - -c
+        - |
+          pip install kafka-python
+          cp -r /usr/local/lib/python3.11/site-packages/* /shared/
+        volumeMounts:
+        - name: shared-libs
+          mountPath: /shared
+        - name: scripts
+          mountPath: /scripts
+      
+      {{- if .Values.replication.sourceToTarget.enabled }}
+      - name: wait-for-source-topics
+        image: confluentinc/cp-kafka:latest
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for source topics..."
+          {{- range .Values.replication.sourceToTarget.topics }}
+          topic="{{ .sourceTopicName }}"
+          echo "Checking topic: $topic"
+          max_attempts=30
+          attempt=0
+          while [ $attempt -lt $max_attempts ]; do
+            if kafka-topics --bootstrap-server {{ $.Values.sourceKafka.bootstrapServers }} --list | grep -q "^$topic$"; then
+              echo "Topic $topic found!"
+              break
+            else
+              echo "Topic $topic not found, waiting 10s... (attempt $((attempt+1))/$max_attempts)"
+              sleep 10
+              attempt=$((attempt+1))
+            fi
+          done
+          {{- end }}
+          echo "Source topics check completed!"
+      {{- end }}
+      
+      containers:
+      {{- if .Values.replication.sourceToTarget.enabled }}
+      - name: source-to-target-replicator
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - python
+        - /scripts/replicator.py
+        - "S2T"
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: "/shared"
+        - name: SOURCE_BOOTSTRAP_SERVERS
+          value: "{{ .Values.sourceKafka.bootstrapServers }}"
+        - name: TARGET_BOOTSTRAP_SERVERS
+          value: "{{ .Values.targetKafka.bootstrapServers }}"
+        - name: CONSUMER_GROUP
+          value: "{{ .Values.consumerGroup.sourceToTarget }}"
+        - name: TOPIC_MAPPING
+          value: |
+            {
+            {{- range $index, $topic := .Values.replication.sourceToTarget.topics }}
+            {{- if $index }},{{ end }}
+            "{{ $topic.sourceTopicName }}": "{{ $topic.targetTopicName }}"
+            {{- end }}
+            }
+        volumeMounts:
+        - name: shared-libs
+          mountPath: /shared
+        - name: scripts
+          mountPath: /scripts
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - |
+              import socket
+              try:
+                  s = socket.socket()
+                  s.connect(('{{ .Values.sourceKafka.bootstrapServers | replace ":9092" "" }}', 9092))
+                  s.close()
+                  print("Source Kafka OK")
+              except Exception as e:
+                  print(f"Source Kafka failed: {e}")
+                  exit(1)
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - |
+              import socket
+              try:
+                  s = socket.socket()
+                  s.connect(('{{ .Values.sourceKafka.bootstrapServers | replace ":9092" "" }}', 9092))
+                  s.close()
+                  print("Source Kafka OK")
+              except Exception as e:
+                  print(f"Source Kafka failed: {e}")
+                  exit(1)
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+      {{- end }}
+      
+      {{- if .Values.replication.targetToSource.enabled }}
+      - name: target-to-source-replicator
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - python
+        - /scripts/replicator.py
+        - "T2S"
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: "/shared"
+        - name: SOURCE_BOOTSTRAP_SERVERS
+          value: "{{ .Values.targetKafka.bootstrapServers }}"
+        - name: TARGET_BOOTSTRAP_SERVERS
+          value: "{{ .Values.sourceKafka.bootstrapServers }}"
+        - name: CONSUMER_GROUP
+          value: "{{ .Values.consumerGroup.targetToSource }}"
+        - name: TOPIC_MAPPING
+          value: |
+            {
+            {{- range $index, $topic := .Values.replication.targetToSource.topics }}
+            {{- if $index }},{{ end }}
+            "{{ $topic.sourceTopicName }}": "{{ $topic.targetTopicName }}"
+            {{- end }}
+            }
+        volumeMounts:
+        - name: shared-libs
+          mountPath: /shared
+        - name: scripts
+          mountPath: /scripts
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - |
+              import socket
+              try:
+                  s = socket.socket()
+                  s.connect(('{{ .Values.targetKafka.bootstrapServers | replace ":9092" "" }}', 9092))
+                  s.close()
+                  print("Target Kafka OK")
+              except Exception as e:
+                  print(f"Target Kafka failed: {e}")
+                  exit(1)
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - |
+              import socket
+              try:
+                  s = socket.socket()
+                  s.connect(('{{ .Values.targetKafka.bootstrapServers | replace ":9092" "" }}', 9092))
+                  s.close()
+                  print("Target Kafka OK")
+              except Exception as e:
+                  print(f"Target Kafka failed: {e}")
+                  exit(1)
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+      {{- end }}
+      
+      volumes:
+      - name: shared-libs
+        emptyDir: {}
+      - name: scripts
+        configMap:
+          name: {{ include "kafka-replicator.fullname" . }}-scripts
+          defaultMode: 0755

@@ -23,7 +23,10 @@ help: ## Mostrar ayuda
 	@echo ""
 	@echo "🔄 Arquitectura desplegada:"
 	@echo "  Flujo Principal: MQTT → Kafka (Principal)"
-	@echo "  Cluster Adicional: Kafka Warehouse (independiente)"
+	@echo "  Cluster Adicional: Kafka Warehouse"
+	@echo "  Replicación Bidireccional:"
+	@echo "    • damage, events-sensor → Kafka Principal → Kafka Warehouse"
+	@echo "    • warehouse-events, inventory-updates ← Kafka Principal ← Kafka Warehouse"
 	@echo ""
 	@echo "Ejemplos:"
 	@echo "  make init              # Usa Kind por defecto"
@@ -163,6 +166,11 @@ deploy:
 		--namespace medisupply \
 		--wait
 
+	@echo "🔄 Desplegando Kafka Replicator (replicación bidireccional)..."
+	@helm upgrade --install kafka-replicator ./kafka-replicator \
+		--namespace medisupply \
+		--wait
+
 
 
 	@echo ""
@@ -174,15 +182,18 @@ deploy:
 	@echo "  ✅ MQTT Event Generator"
 	@echo "  ✅ MQTT Order Event Client"
 	@echo "  ✅ MQTT-Kafka Bridge"
+	@echo "  ✅ Kafka Replicator (Replicación Bidireccional)"
 	@echo "  ✅ Strimzi Operator"
 	@echo "  ✅ Kafka Pedidos (Cluster secundario)"
 	@echo "  ✅ Kafka Connect + RabbitMQ Connector"
-	@echo "  ✅ MirrorMaker2 (MM2)"
+	@echo "  ✅ Kafka Replicator (Python-based)"
 	@echo ""
 	@echo ""
-	@echo "🔄 Flujo de datos configurado:"
-	@echo "  📡 MQTT → Kafka → RabbitMQ:"
+	@echo "🔄 Flujos de datos configurados:"
+	@echo "  📡 MQTT → Kafka:"
 	@echo "     mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge → Kafka"
+	@echo "  🔄 Replicación Bidireccional (Kafka Replicator):"
+	@echo "     Kafka ⟷ Kafka Warehouse (topics configurables por dirección)"
 	@echo ""
 	@echo "💡 Para acceder a los dashboards:"
 	@echo "  make kafka-ui    # Kafka UI (ambos clusters) en http://localhost:9090"
@@ -196,6 +207,8 @@ clean: ## Eliminar charts del cluster
 	@echo "📊 Eliminando MQTT Event Generator..."
 	@helm uninstall mqtt-event-generator --namespace medisupply || true
 
+	@echo "🔄 Eliminando Kafka Replicator..."
+	@helm uninstall kafka-replicator --namespace medisupply || true
 	@echo "🔗 Eliminando MQTT-Kafka Bridge..."
 	@helm uninstall mqtt-kafka-bridge --namespace medisupply || true
 	@echo "📊 Eliminando MQTT Order Event Client..."
@@ -228,7 +241,7 @@ clean: ## Eliminar charts del cluster
 	@echo "  ❌ Kafka"
 	@echo "  ❌ Kafka Pedidos"
 	@echo "  ❌ Kafka Connect + Conectores"
-	@echo "  ❌ MirrorMaker2"
+	@echo "  ❌ Kafka Replicator"
 	@echo "  ❌ Strimzi Operator"
 	@echo "  ❌ Namespace medisupply"
 

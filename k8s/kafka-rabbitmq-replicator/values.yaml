@@ -1,0 +1,67 @@
+replicaCount: 1  # CRITICAL: Must be 1 to avoid duplicate processing
+
+image:
+  repository: python
+  tag: "3.11-slim"
+  pullPolicy: IfNotPresent
+
+# Kafka configuration
+kafka:
+  bootstrapServers: "kafka:9092"
+
+# RabbitMQ configuration  
+rabbitmq:
+  host: "rabbitmq"
+  port: 5672
+  username: "user"
+  password: "password"
+  vhost: "/"
+
+# Consumer groups
+consumerGroup:
+  kafkaToRabbitmq: "kafka-rabbitmq-replicator-k2r"
+  rabbitmqToKafka: "kafka-rabbitmq-replicator-r2k"
+
+# Replication configuration
+replication:
+  kafkaToRabbitmq:
+    enabled: true
+    mappings:
+      - kafkaTopic: "events-order-damage"
+        rabbitmqQueue: "order-damage-queue"
+        rabbitmqExchange: "events"
+        rabbitmqRoutingKey: "order.damage"
+      - kafkaTopic: "events-sensor"
+        rabbitmqQueue: "sensor-queue"
+        rabbitmqExchange: "events"
+        rabbitmqRoutingKey: "sensor.data"
+  
+  rabbitmqToKafka:
+    enabled: false
+    mappings: []
+    #  - rabbitmqQueue: "warehouse-events"
+    #    kafkaTopic: "warehouse-events"
+    #  - rabbitmqQueue: "notifications"
+    #    kafkaTopic: "notifications"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Logging configuration
+logging:
+  level: INFO
+  
+# Health check configuration
+healthCheck:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10

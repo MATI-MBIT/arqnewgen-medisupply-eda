@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kafka-rabbitmq-replicator
+description: A Helm chart for Kafka-RabbitMQ message replicator
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
