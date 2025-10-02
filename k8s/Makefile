@@ -68,6 +68,11 @@ else
 endif
 	@echo "🎉 Cluster $(CLUSTER_NAME) con $(PROVIDER) listo!"
 
+ifeq ($(PROVIDER),kind)
+	@echo "🔨 Construyendo y cargando imágenes Docker en Kind..."
+	@$(MAKE) -C ../services build-load-all
+endif
+
 	@echo "📦 Desplegando charts en el cluster..."
 	@echo "🔧 Verificando que el cluster esté activo..."
 ifeq ($(PROVIDER),kind)
