@@ -15,7 +15,8 @@ services/warehouse/batch/
 │   │   └── config.go              # Environment variable configuration
 │   ├── infrastructure/
 │   │   ├── driving-adapters/      # External interfaces that drive the application
-│   │   │   └── event_consumer_adapter.go  # Kafka event consumer adapter
+│   │   │   ├── event_consumer_adapter.go  # Kafka event consumer adapter
+│   │   │   └── api_service_adapter.go     # HTTP REST API adapter
 │   │   └── driven-adapters/       # External dependencies driven by the application
 │   │       └── kafka_producer.go  # Kafka producer adapter
 │   └── main.go                    # Application entry point and dependency injection
@@ -46,6 +47,9 @@ services/warehouse/batch/
 - **EventConsumerAdapter**: 
   - **Architectural Role**: Adapter that subscribes to message-oriented middleware
   - **Responsibility**: Listens for asynchronous messages from Kafka, translates external events into domain events that the application layer can understand and execute
+- **ApiServiceAdapter**: 
+  - **Architectural Role**: HTTP REST API adapter that exposes application capabilities
+  - **Responsibility**: Provides synchronous HTTP endpoints for health checks and potential future API operations
 
 #### Driven Adapters
 - **KafkaProducer**: Handles message production to Kafka (for demo purposes)
@@ -66,6 +70,7 @@ The application can be configured using environment variables:
 | `KAFKA_TOPIC` | `my-topic` | Kafka topic to consume from and produce to |
 | `KAFKA_BROKER_ADDRESS` | `localhost:9092` | Kafka broker address |
 | `KAFKA_GROUP_ID` | `my-group` | Kafka consumer group ID |
+| `HTTP_PORT` | `8080` | HTTP port for the API service adapter |
 
 ### Example Configuration
 
@@ -79,6 +84,7 @@ Edit `.env` with your configuration:
 KAFKA_TOPIC=warehouse-events
 KAFKA_BROKER_ADDRESS=kafka:9092
 KAFKA_GROUP_ID=warehouse-batch-service
+HTTP_PORT=8080
 ```
 
 ## Running the Application
@@ -97,6 +103,7 @@ cd services/warehouse/batch
 export KAFKA_TOPIC=warehouse-events
 export KAFKA_BROKER_ADDRESS=kafka:9092
 export KAFKA_GROUP_ID=warehouse-batch-service
+export HTTP_PORT=8080
 go run src/main.go
 ```
 
@@ -122,9 +129,11 @@ docker run --rm warehouse-batch-service:latest
 
 # With custom environment variables
 docker run --rm \
+  -p 8080:8080 \
   -e KAFKA_TOPIC=warehouse-events \
   -e KAFKA_BROKER_ADDRESS=kafka:9092 \
   -e KAFKA_GROUP_ID=warehouse-batch-service \
+  -e HTTP_PORT=8080 \
   warehouse-batch-service:latest
 
 # With Docker Compose (if you have a docker-compose.yml)
@@ -160,6 +169,8 @@ spec:
       containers:
       - name: warehouse-batch-service
         image: warehouse-batch-service:latest
+        ports:
+        - containerPort: 8080
         env:
         - name: KAFKA_TOPIC
           value: "warehouse-events"
@@ -167,6 +178,34 @@ spec:
           value: "kafka:9092"
         - name: KAFKA_GROUP_ID
           value: "warehouse-batch-service"
+        - name: HTTP_PORT
+          value: "8080"
+```
+
+## HTTP API Endpoints
+
+The ApiServiceAdapter exposes the following HTTP endpoints:
+
+### Health Check
+- **Endpoint**: `GET /health`
+- **Description**: Returns the health status of the service
+- **Response**: 
+  ```json
+  {
+    "status": "healthy",
+    "service": "warehouse-batch",
+    "timestamp": "2024-01-01T12:00:00Z"
+  }
+  ```
+
+### Testing the API
+
+```bash
+# Health check
+curl http://localhost:8080/health
+
+# With Docker
+curl http://localhost:8080/health
 ```
 
 ## Application Behavior
@@ -174,9 +213,10 @@ spec:
 The application will:
 1. Load configuration from environment variables (with fallback to defaults)
 2. Start the EventConsumerAdapter to listen for Kafka messages
-3. Start a KafkaProducer (for demo purposes) to generate test messages
-4. Process incoming events through the EventService
-5. Handle graceful shutdown on SIGINT/SIGTERM signals
+3. Start the ApiServiceAdapter to serve HTTP requests on the configured port
+4. Start a KafkaProducer (for demo purposes) to generate test messages
+5. Process incoming events through the EventService
+6. Handle graceful shutdown on SIGINT/SIGTERM signals
 
 ## Docker Image Features
 

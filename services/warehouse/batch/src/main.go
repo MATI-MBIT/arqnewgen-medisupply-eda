@@ -19,8 +19,8 @@ func main() {
 
 	// Load configuration from environment variables
 	cfg := config.LoadConfig()
-	log.Printf("Configuration - Topic: %s, Broker: %s, GroupID: %s", 
-		cfg.Kafka.Topic, cfg.Kafka.BrokerAddress, cfg.Kafka.GroupID)
+	log.Printf("Configuration - Topic: %s, Broker: %s, GroupID: %s, HTTP Port: %s", 
+		cfg.Kafka.Topic, cfg.Kafka.BrokerAddress, cfg.Kafka.GroupID, cfg.HTTP.Port)
 
 	// Create a context that can be cancelled
 	ctx, cancel := context.WithCancel(context.Background())
@@ -29,19 +29,26 @@ func main() {
 	// Initialize application layer (business logic)
 	eventService := application.NewEventService()
 
-	// Initialize driving adapter (EventConsumerAdapter)
+	// Initialize driving adapters
+	// EventConsumerAdapter for async event processing
 	eventConsumerAdapter := drivingadapters.NewEventConsumerAdapter(
 		cfg.Kafka.BrokerAddress,
 		cfg.Kafka.Topic,
 		cfg.Kafka.GroupID,
 		eventService,
 	)
+	
+	// ApiServiceAdapter for synchronous HTTP requests
+	apiServiceAdapter := drivingadapters.NewApiServiceAdapter(cfg.HTTP.Port)
 
 	// Initialize driven adapter (KafkaProducer) - optional for demo
 	kafkaProducer := drivenadapters.NewKafkaProducer(cfg.Kafka.BrokerAddress, cfg.Kafka.Topic)
 
 	// Start the event consumer adapter in a goroutine
 	go eventConsumerAdapter.Start(ctx)
+
+	// Start the HTTP API service adapter in a goroutine
+	go apiServiceAdapter.Start(ctx)
 
 	// Start the producer in a goroutine (for demo purposes)
 	go kafkaProducer.StartProducing(ctx)
