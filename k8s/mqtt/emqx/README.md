@@ -1,36 +1,336 @@
-# Introduction
+# EMQX Chart - MediSupply EDA
 
-This chart bootstraps an emqx deployment on a Kubernetes cluster using the Helm package manager.
+Broker MQTT de alto rendimiento para la arquitectura Event-Driven de MediSupply. EMQX maneja la comunicación entre sensores IoT, generadores de eventos y clientes de procesamiento.
 
-# Prerequisites
+## 🎯 Propósito en MediSupply EDA
 
-+ Kubernetes 1.6+
-+ Helm
-
-# Installing the Chart
-
-To install the chart with the release name `my-emqx`:
-
-+ From Github
-  ```
-  $ git clone https://github.com/emqx/emqx.git
-  $ cd emqx/deploy/charts/emqx
-  $ helm install my-emqx .
-  ```
-
-+ From chart Repos
-  ```
-  helm repo add emqx https://repos.emqx.io/charts
-  helm install my-emqx emqx/emqx
-  ```
-  > If you want to install an unstable version, you need to add `--devel` when you execute the `helm install` command.
-
-# Uninstalling the Chart
-
-To uninstall/delete the `my-emqx` deployment:
+EMQX actúa como el broker MQTT central en el flujo de eventos:
 
 ```
-$ helm del  my-emqx
+mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge
+```
+
+### Funciones Principales
+
+- **Recepción de eventos IoT**: Sensores de temperatura, humedad, daños
+- **Distribución de eventos**: Routing a múltiples consumidores
+- **Gestión de conexiones**: Manejo de clientes MQTT concurrentes
+- **Dashboard de monitoreo**: Interfaz web para administración
+
+## 🚀 Instalación
+
+### Instalación en MediSupply
+
+```bash
+# Desde el directorio k8s
+helm install emqx ./mqtt/emqx --namespace medilogistic --create-namespace
+
+# O usando el Makefile
+make deploy  # Incluye EMQX en el despliegue completo
+```
+
+### Verificación
+
+```bash
+# Verificar pods
+kubectl get pods -l app.kubernetes.io/name=emqx -n medilogistic
+
+# Verificar servicios
+kubectl get svc -l app.kubernetes.io/name=emqx -n medilogistic
+
+# Acceder al dashboard
+kubectl port-forward svc/emqx 18083:18083 -n medilogistic
+```
+
+## ⚙️ Configuración MediSupply
+
+### Topics MQTT Utilizados
+
+| Topic | Propósito | Publisher | Subscriber |
+|-------|-----------|-----------|------------|
+| `events/sensor` | Eventos de sensores IoT | mqtt-event-generator | mqtt-order-event-client |
+| `orders/events` | Eventos de pedidos | mqtt-order-event-client | mqtt-kafka-bridge |
+| `damage/alerts` | Alertas de daños | Sensores | Sistema de alertas |
+
+### Configuración de Producción
+
+```yaml
+replicaCount: 3
+
+emqxConfig:
+  EMQX_CLUSTER__DISCOVERY_STRATEGY: "k8s"
+  EMQX_CLUSTER__K8S__SERVICE_NAME: "emqx-headless"
+  EMQX_CLUSTER__K8S__NAMESPACE: "medilogistic"
+  
+  # Configuración MQTT
+  EMQX_MQTT__MAX_PACKET_SIZE: "1MB"
+  EMQX_MQTT__MAX_CLIENTID_LEN: 65535
+  EMQX_MQTT__MAX_TOPIC_LEVELS: 128
+  
+  # Configuración de listeners
+  EMQX_LISTENERS__TCP__DEFAULT__MAX_CONNECTIONS: 1024000
+  EMQX_LISTENERS__WS__DEFAULT__MAX_CONNECTIONS: 102400
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+```
+
+## 🌐 Acceso y Puertos
+
+### Puertos Estándar
+
+| Puerto | Protocolo | Descripción |
+|--------|-----------|-------------|
+| 1883 | MQTT | Conexiones MQTT estándar |
+| 8883 | MQTTS | MQTT sobre SSL/TLS |
+| 8083 | WebSocket | MQTT sobre WebSocket |
+| 8084 | WSS | MQTT sobre WebSocket Secure |
+| 18083 | HTTP | Dashboard y API REST |
+
+### Acceso al Dashboard
+
+```bash
+# Port-forward para acceso local
+kubectl port-forward svc/emqx 18083:18083 -n medilogistic
+
+# Acceder en: http://localhost:18083
+# Usuario: admin
+# Contraseña: public (por defecto)
+```
+
+## 🔧 Configuración Avanzada
+
+### Autenticación y Autorización
+
+```yaml
+emqxConfig:
+  # Autenticación por base de datos interna
+  EMQX_AUTH__MNESIA__PASSWORD_HASH: "sha256"
+  
+  # Configuración de ACL
+  EMQX_AUTHORIZATION__SOURCES: |
+    [
+      {
+        "type": "built_in_database",
+        "enable": true
+      }
+    ]
+```
+
+### Persistencia
+
+```yaml
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: 10Gi
+  accessMode: ReadWriteOnce
+```
+
+### Clustering
+
+```yaml
+emqxConfig:
+  EMQX_CLUSTER__DISCOVERY_STRATEGY: "k8s"
+  EMQX_CLUSTER__K8S__SERVICE_NAME: "emqx-headless"
+  EMQX_CLUSTER__K8S__NAMESPACE: "medilogistic"
+  EMQX_CLUSTER__K8S__ADDRESS_TYPE: "hostname"
+  EMQX_CLUSTER__K8S__SUFFIX: "svc.cluster.local"
+```
+
+## 📊 Monitoreo
+
+### Métricas Prometheus
+
+```yaml
+metrics:
+  enabled: true
+  type: "prometheus"
+
+service:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "18083"
+    prometheus.io/path: "/api/v5/prometheus/stats"
+```
+
+### Health Checks
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /status
+    port: 18083
+  initialDelaySeconds: 60
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /status
+    port: 18083
+  initialDelaySeconds: 10
+  periodSeconds: 5
+```
+
+## 🔒 Seguridad
+
+### SSL/TLS
+
+```yaml
+ssl:
+  enabled: true
+  useExisting: false
+  commonName: "emqx.medilogistic.local"
+  dnsnames:
+    - "emqx.medilogistic.local"
+    - "*.emqx.medilogistic.local"
+
+emqxConfig:
+  EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE: "/tmp/ssl/tls.crt"
+  EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE: "/tmp/ssl/tls.key"
+```
+
+### Configuración de Usuarios
+
+```bash
+# Crear usuario via API
+curl -X POST http://localhost:18083/api/v5/authentication/password_based:built_in_database/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "medisupply_client",
+    "password": "secure_password"
+  }'
+```
+
+## 🧪 Testing
+
+### Conexión MQTT
+
+```bash
+# Instalar cliente MQTT
+apt-get install mosquitto-clients
+
+# Publicar mensaje de prueba
+mosquitto_pub -h localhost -p 1883 -t "events/sensor" -m '{"temperature": 25.5, "humidity": 60}'
+
+# Suscribirse a topic
+mosquitto_sub -h localhost -p 1883 -t "events/sensor"
+```
+
+### Testing con Servicios MediSupply
+
+```bash
+# Verificar que mqtt-event-generator está publicando
+kubectl logs -l app=mqtt-event-generator -n medilogistic
+
+# Verificar que mqtt-order-event-client está recibiendo
+kubectl logs -l app=mqtt-order-event-client -n medilogistic
+```
+
+## 🚨 Troubleshooting
+
+### Problemas Comunes
+
+1. **Pods no se inician**:
+   ```bash
+   kubectl describe pod -l app.kubernetes.io/name=emqx -n medilogistic
+   kubectl logs -l app.kubernetes.io/name=emqx -n medilogistic
+   ```
+
+2. **Cluster no se forma**:
+   ```bash
+   # Verificar servicio headless
+   kubectl get svc emqx-headless -n medilogistic
+   
+   # Verificar DNS interno
+   kubectl exec -it emqx-0 -n medilogistic -- nslookup emqx-headless.medilogistic.svc.cluster.local
+   ```
+
+3. **Conexiones MQTT fallan**:
+   ```bash
+   # Verificar puertos
+   kubectl port-forward svc/emqx 1883:1883 -n medilogistic
+   
+   # Test de conectividad
+   telnet localhost 1883
+   ```
+
+### Logs y Debug
+
+```bash
+# Logs detallados
+kubectl logs emqx-0 -n medilogistic -f
+
+# Logs de todos los pods
+kubectl logs -l app.kubernetes.io/name=emqx -n medilogistic --all-containers=true
+
+# Configuración actual
+kubectl exec emqx-0 -n medilogistic -- emqx ctl cluster status
+```
+
+## 📋 Configuración por Defecto
+
+```yaml
+replicaCount: 1
+
+image:
+  repository: emqx/emqx
+  tag: "5.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  mqtt: 1883
+  mqttssl: 8883
+  ws: 8083
+  wss: 8084
+  dashboard: 18083
+
+emqxConfig:
+  EMQX_CLUSTER__DISCOVERY_STRATEGY: "manual"
+  EMQX_DASHBOARD__DEFAULT_USERNAME: "admin"
+  EMQX_DASHBOARD__DEFAULT_PASSWORD: "public"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+```
+
+## 🔄 Integración con MediSupply
+
+### Flujo de Datos
+
+1. **mqtt-event-generator** → publica eventos a `events/sensor`
+2. **mqtt-order-event-client** → suscribe a `events/sensor`, procesa y publica a `orders/events`
+3. **mqtt-kafka-bridge** → suscribe a `orders/events` y envía a Kafka
+
+### Configuración de Clientes
+
+Los servicios MediSupply se configuran para conectar a EMQX:
+
+```yaml
+# En mqtt-event-generator
+env:
+  - name: MQTT_BROKER
+    value: "tcp://emqx:1883"
+  - name: MQTT_TOPIC
+    value: "events/sensor"
+
+# En mqtt-order-event-client  
+env:
+  - name: MQTT_BROKER
+    value: "tcp://emqx:1883"
+  - name: MQTT_TOPIC
+    value: "events/sensor"
 ```
 
 # Configuration

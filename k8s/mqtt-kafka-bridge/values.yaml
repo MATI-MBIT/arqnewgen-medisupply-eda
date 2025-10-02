@@ -6,7 +6,7 @@ image:
   pullPolicy: IfNotPresent
 
 mqtt:
-  broker: "emqx"
+  broker: "emqx.medilogistic.svc.cluster.local"
   port: 1883
   topics:
     - "events/sensor"

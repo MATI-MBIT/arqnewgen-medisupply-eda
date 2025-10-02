@@ -1,53 +1,366 @@
-<p align="center"><img src="https://raw.githubusercontent.com/kedacore/keda/main/images/keda-logo-transparent.png" width="300"/></p>
-<p style="font-size: 25px" align="center"><b>Kubernetes-based Event Driven Autoscaling</b></p>
+# KEDA Chart - MediSupply EDA
 
-KEDA allows for fine grained autoscaling (including to/from zero) for event driven Kubernetes workloads.  KEDA serves as a Kubernetes Metrics Server and allows users to define autoscaling rules using a dedicated Kubernetes custom resource definition.
+KEDA (Kubernetes Event Driven Autoscaling) para la arquitectura Event-Driven de MediSupply. Proporciona autoescalado basado en eventos para los servicios que procesan mensajes de Kafka, MQTT y RabbitMQ.
 
-KEDA can run on both the cloud and the edge, integrates natively with Kubernetes components such as the Horizontal Pod Autoscaler, and has no external dependencies.
+## 🎯 Propósito en MediSupply EDA
 
----
-<p align="center">
-We are a Cloud Native Computing Foundation (CNCF) graduated project.
+KEDA permite el autoescalado automático de los servicios basado en métricas de eventos:
 
-<img src="https://raw.githubusercontent.com/kedacore/keda/main/images/logo-cncf.svg" height="75px">
-</p>
-
----
-
-## TL;DR
-
-```console
-helm repo add kedacore https://kedacore.github.io/charts
-helm repo update
-
-kubectl create namespace keda
-helm install keda kedacore/keda --namespace keda --version 2.17.2
+```
+Kafka/MQTT/RabbitMQ Metrics → KEDA → HPA → Pod Scaling
 ```
 
-## Introduction
+### Funciones Principales
 
-This chart bootstraps KEDA infrastructure on a Kubernetes cluster using the Helm package manager.
+- **Autoescalado basado en eventos**: Escala pods según la carga de mensajes
+- **Escalado a cero**: Reduce pods a 0 cuando no hay eventos
+- **Múltiples scalers**: Soporta Kafka, MQTT, RabbitMQ, HTTP, etc.
+- **Integración nativa**: Funciona con Kubernetes HPA
 
-As part of that, it will install all the required Custom Resource Definitions (CRD).
+## 🚀 Instalación MediSupply
 
-## Installing the Chart
+### Instalación Estándar
 
-To install the chart with the release name `keda`:
+```bash
+# Desde el directorio k8s
+helm install keda ./keda --namespace keda-system --create-namespace
 
-```console
-$ kubectl create namespace keda
-$ helm install keda kedacore/keda --namespace keda --version 2.17.2
+# O usando el Makefile
+make init  # Incluye KEDA en la inicialización del cluster
 ```
 
-## Uninstalling the Chart
+### Verificación
 
-To uninstall/delete the `keda` Helm chart:
+```bash
+# Verificar pods de KEDA
+kubectl get pods -n keda-system
 
-```console
-helm uninstall keda
+# Verificar CRDs instalados
+kubectl get crd | grep keda
+
+# Verificar operador
+kubectl get deployment keda-operator -n keda-system
 ```
 
-The command removes all the Kubernetes components associated with the chart and deletes the release.
+## ⚙️ Configuración para MediSupply
+
+### ScaledObjects para Servicios
+
+#### 1. Autoescalado basado en Kafka
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: kafka-consumer-scaler
+  namespace: medisupply
+spec:
+  scaleTargetRef:
+    name: mqtt-kafka-bridge
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+  - type: kafka
+    metadata:
+      bootstrapServers: kafka.medisupply.svc.cluster.local:9092
+      consumerGroup: mqtt-kafka-bridge-group
+      topic: events-order
+      lagThreshold: '10'
+```
+
+#### 2. Autoescalado basado en RabbitMQ
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: rabbitmq-consumer-scaler
+  namespace: mediorder
+spec:
+  scaleTargetRef:
+    name: order-processor
+  minReplicaCount: 0
+  maxReplicaCount: 5
+  triggers:
+  - type: rabbitmq
+    metadata:
+      host: amqp://user:password@rabbitmq.mediorder.svc.cluster.local:5672/
+      queueName: order-damage-queue
+      queueLength: '5'
+```
+
+#### 3. Autoescalado basado en HTTP
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: api-scaler
+  namespace: medisupply
+spec:
+  scaleTargetRef:
+    name: mqtt-order-event-client
+  minReplicaCount: 1
+  maxReplicaCount: 8
+  triggers:
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus.istio-system.svc.cluster.local:9090
+      metricName: http_requests_per_second
+      threshold: '100'
+      query: sum(rate(http_requests_total[1m]))
+```
+
+## 📊 Scalers Disponibles para MediSupply
+
+### Kafka Scaler
+
+```yaml
+triggers:
+- type: kafka
+  metadata:
+    bootstrapServers: kafka.medisupply.svc.cluster.local:9092
+    consumerGroup: my-consumer-group
+    topic: events-order
+    lagThreshold: '10'
+    offsetResetPolicy: latest
+```
+
+### RabbitMQ Scaler
+
+```yaml
+triggers:
+- type: rabbitmq
+  metadata:
+    host: amqp://user:password@rabbitmq.mediorder.svc.cluster.local:5672/
+    queueName: order-damage-queue
+    queueLength: '5'
+    vhostName: '/'
+```
+
+### Prometheus Scaler
+
+```yaml
+triggers:
+- type: prometheus
+  metadata:
+    serverAddress: http://prometheus.istio-system.svc.cluster.local:9090
+    metricName: custom_metric
+    threshold: '50'
+    query: sum(custom_metric)
+```
+
+### MQTT Scaler (Experimental)
+
+```yaml
+triggers:
+- type: mqtt
+  metadata:
+    host: tcp://emqx.medilogistic.svc.cluster.local:1883
+    topic: events/sensor
+    username: admin
+    password: public
+    targetValue: '10'
+```
+
+## 🔧 Configuración Avanzada
+
+### Configuración Global de KEDA
+
+```yaml
+# values.yaml
+image:
+  keda:
+    repository: ghcr.io/kedacore/keda
+    tag: 2.17.2
+  metricsApiServer:
+    repository: ghcr.io/kedacore/keda-metrics-apiserver
+    tag: 2.17.2
+
+resources:
+  operator:
+    limits:
+      cpu: 1000m
+      memory: 1000Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  
+  metricsServer:
+    limits:
+      cpu: 1000m
+      memory: 1000Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+
+logging:
+  operator:
+    level: info
+  metricServer:
+    level: 0
+```
+
+### Configuración de Seguridad
+
+```yaml
+securityContext:
+  operator:
+    runAsNonRoot: true
+    runAsUser: 1001
+    capabilities:
+      drop:
+      - ALL
+  
+  metricServer:
+    runAsNonRoot: true
+    runAsUser: 1001
+```
+
+## 📈 Monitoreo y Métricas
+
+### Métricas de KEDA
+
+```bash
+# Verificar métricas de KEDA
+kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1" | jq .
+
+# Ver ScaledObjects
+kubectl get scaledobjects -A
+
+# Ver HPA generados por KEDA
+kubectl get hpa -A
+```
+
+### Prometheus Metrics
+
+KEDA expone métricas en formato Prometheus:
+
+```yaml
+prometheus:
+  metricServer:
+    enabled: true
+    port: 9022
+  operator:
+    enabled: true
+    port: 8080
+```
+
+### Grafana Dashboard
+
+Importar dashboard de KEDA (ID: 14661) para visualizar:
+- Número de ScaledObjects activos
+- Métricas de escalado por servicio
+- Latencia de escalado
+- Errores de escalado
+
+## 🚨 Troubleshooting
+
+### Problemas Comunes
+
+1. **ScaledObject no escala**:
+
+   ```bash
+   # Verificar estado del ScaledObject
+   kubectl describe scaledobject <name> -n <namespace>
+   
+   # Ver logs del operador
+   kubectl logs deployment/keda-operator -n keda-system
+   ```
+
+2. **Métricas no disponibles**:
+
+   ```bash
+   # Verificar metrics server
+   kubectl get pods -l app.kubernetes.io/name=keda-metrics-apiserver -n keda-system
+   
+   # Verificar métricas externas
+   kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1"
+   ```
+
+3. **Escalado muy lento**:
+
+   ```bash
+   # Verificar configuración de HPA
+   kubectl get hpa -A
+   
+   # Ajustar intervalos de escalado
+   kubectl patch scaledobject <name> -n <namespace> --type='merge' -p='{"spec":{"pollingInterval":15}}'
+   ```
+
+### Comandos de Diagnóstico
+
+```bash
+# Estado general de KEDA
+kubectl get all -n keda-system
+
+# Ver todos los ScaledObjects
+kubectl get scaledobjects -A -o wide
+
+# Logs detallados
+kubectl logs deployment/keda-operator -n keda-system --tail=100
+
+# Métricas de un ScaledObject específico
+kubectl describe scaledobject <name> -n <namespace>
+```
+
+## 🔄 Integración con MediSupply
+
+### Servicios que Usan KEDA
+
+1. **mqtt-kafka-bridge**: Escala basado en lag de Kafka
+2. **kafka-replicator**: Escala basado en topics de origen
+3. **kafka-rabbitmq-replicator**: Escala basado en queues de RabbitMQ
+4. **mqtt-order-event-client**: Escala basado en métricas HTTP
+
+### Configuración Recomendada
+
+```yaml
+# Para servicios de procesamiento de eventos
+minReplicaCount: 1
+maxReplicaCount: 10
+pollingInterval: 30
+cooldownPeriod: 300
+
+# Para servicios de API
+minReplicaCount: 2
+maxReplicaCount: 20
+pollingInterval: 15
+cooldownPeriod: 60
+```
+
+## 📋 Configuración por Defecto MediSupply
+
+```yaml
+image:
+  keda:
+    tag: 2.17.2
+  metricsApiServer:
+    tag: 2.17.2
+
+resources:
+  operator:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+logging:
+  operator:
+    level: info
+
+prometheus:
+  metricServer:
+    enabled: true
+  operator:
+    enabled: true
+
+securityContext:
+  operator:
+    runAsNonRoot: true
+```
 
 ## Configuration
 
