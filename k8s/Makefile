@@ -170,6 +170,12 @@ deploy:
 		--values ./config/kafka-warehouse-values.yaml \
 		--wait
 
+	@echo "📦 Desplegando Warehouse Batch..."
+	@helm upgrade --install warehouse-batch ./microservice \
+		--namespace mediwarehouse \
+		--values ./config/services/warehouse/batch/batch-service-values.yaml \
+		--wait
+
     # Medisupply - Main
 	@echo "⚡ Desplegando Kafka (cluster principal)..."
 	@helm upgrade --install kafka ./kafka \
@@ -195,11 +201,6 @@ deploy:
 	@echo "🔄 Desplegando Kafka-RabbitMQ Replicator (replicación bidireccional)..."
 	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
 		--namespace medisupply \
-		--wait
-
-	@echo "📦 Desplegando Warehouse Batch..."
-	@helm upgrade --install warehouse-batch ./warehouse-batch \
-		--namespace mediwarehouse \
 		--wait
 
 	@echo ""
