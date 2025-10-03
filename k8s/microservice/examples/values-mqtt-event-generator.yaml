@@ -1,0 +1,55 @@
+# Valores específicos para MQTT Event Generator
+# Uso: helm install mqtt-event-generator ./k8s/microservice -f examples/values-mqtt-event-generator.yaml
+
+image:
+  repository: mqtt-event-generator
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Configuración MQTT
+mqtt:
+  enabled: true
+  broker: "tcp://emqx.medilogistic.svc.cluster.local:1883"
+  clientId: "event-generator-k8s"
+  topic: "events/sensor"
+  username: "admin"
+  password: "public"
+
+# Configuración específica del generador de eventos
+app:
+  config:
+    EVENT_INTERVAL_SECONDS: "30"
+
+# Health checks específicos
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Recursos
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Anotaciones para Istio
+podAnnotations:
+  sidecar.istio.io/inject: "true"

@@ -1,0 +1,113 @@
+# Ejemplo de valores para un microservicio API REST genérico
+# Uso: helm install my-api ./k8s/microservice -f examples/values-api-service.yaml
+
+image:
+  repository: my-api-service
+  pullPolicy: IfNotPresent
+  tag: "v1.0.0"
+
+# Configuración del servicio
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+# Múltiples réplicas para alta disponibilidad
+replicaCount: 3
+
+# Variables de entorno personalizadas
+env:
+  custom:
+    - name: NODE_ENV
+      value: "production"
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: db-secret
+          key: url
+    - name: API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: api-secret
+          key: key
+
+# Configuración de aplicación
+app:
+  config:
+    PORT: "3000"
+    LOG_LEVEL: "info"
+    CORS_ORIGIN: "*"
+
+# Ingress para exponer la API
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: api-tls
+      hosts:
+        - api.example.com
+
+# Autoscaling habilitado
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Health checks para API
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 30
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /ready
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Recursos más generosos para API
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# ConfigMap para configuración adicional
+configMap:
+  enabled: true
+  data:
+    app-config.json: |
+      {
+        "database": {
+          "pool": {
+            "min": 2,
+            "max": 10
+          }
+        },
+        "cache": {
+          "ttl": 300
+        }
+      }
+
+# Secret para credenciales (valores en base64)
+secret:
+  enabled: true
+  data:
+    jwt-secret: bXlqd3RzZWNyZXQ=
+    db-password: bXlkYnBhc3N3b3Jk

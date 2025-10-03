@@ -1,0 +1,16 @@
+apiVersion: v2
+name: microservice
+description: A generic Helm chart for deploying microservices
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - microservice
+  - generic
+  - deployment
+home: https://github.com/your-org/microservice-chart
+sources:
+  - https://github.com/your-org/microservice-chart
+maintainers:
+  - name: Development Team
+    email: dev@yourcompany.com
