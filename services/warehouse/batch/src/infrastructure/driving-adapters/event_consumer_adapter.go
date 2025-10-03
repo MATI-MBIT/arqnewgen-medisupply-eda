@@ -25,10 +25,11 @@ func NewEventConsumerAdapter(brokerAddress, topic, groupID string, eventHandler 
 		MinBytes:    10e3, // 10KB
 		MaxBytes:    10e6, // 10MB
 		StartOffset: kafka.LastOffset,
-		// Add retry and timeout configurations for Kubernetes
-		ReadTimeout:  10 * time.Second,
-		DialTimeout:  10 * time.Second,
-		MaxAttempts:  3,
+		// Add retry configurations for Kubernetes
+		MaxAttempts: 3,
+		Dialer: &kafka.Dialer{
+			Timeout: 10 * time.Second,
+		},
 	})
 
 	return &EventConsumerAdapter{
@@ -48,8 +49,13 @@ func (adapter *EventConsumerAdapter) Start(ctx context.Context) {
 			adapter.Close()
 			return
 		default:
+			// Create a context with timeout for reading messages
+			readCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			
 			// Fetch the next message from Kafka
-			msg, err := adapter.reader.ReadMessage(ctx)
+			msg, err := adapter.reader.ReadMessage(readCtx)
+			cancel()
+			
 			if err != nil {
 				log.Printf("Error reading message: %v", err)
 				// Add backoff for coordinator errors
