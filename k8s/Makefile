@@ -143,13 +143,15 @@ deploy:
 		--wait
 
 	@echo "📊 Desplegando MQTT Event Generator..."
-	@helm upgrade --install mqtt-event-generator ./mqtt-event-generator \
+	@helm upgrade --install mqtt-event-generator ./microservice \
 		--namespace medilogistic \
+		--values ./config/services/mqtt-event-generator-values.yaml \
 		--wait
 
 	@echo "📊 Desplegando MQTT Order Event Client..."
-	@helm upgrade --install mqtt-order-event-client ./mqtt-order-event-client \
+	@helm upgrade --install mqtt-order-event-client ./microservice \
 		--namespace medilogistic \
+		--values ./config/services/mqtt-order-event-client-values.yaml \
 		--wait
 
     # Order

@@ -1,0 +1,146 @@
+# Default values for microservice
+replicaCount: 1
+
+image:
+  repository: ""
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+# Environment variables configuration
+env:
+  # Common environment variables
+  common:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+  # Custom environment variables (can be overridden per deployment)
+  custom: []
+  # Example:
+  # custom:
+  #   - name: CUSTOM_VAR
+  #     value: "custom-value"
+  #   - name: SECRET_VAR
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: my-secret
+  #         key: secret-key
+
+# MQTT Configuration (optional, can be disabled)
+mqtt:
+  enabled: false
+  broker: "tcp://emqx.medilogistic.svc.cluster.local:1883"
+  clientId: "microservice-client"
+  topic: "events/default"
+  username: "admin"
+  password: "public"
+
+# Application specific configuration
+app:
+  # Custom configuration that can be passed as environment variables
+  config: {}
+  # Example:
+  # config:
+  #   EVENT_INTERVAL_SECONDS: "30"
+  #   HTTP_PORT: "8080"
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  sidecar.istio.io/inject: "true"
+
+podSecurityContext: {}
+
+securityContext: {}
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Health checks
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+# ConfigMap configuration
+configMap:
+  enabled: false
+  data: {}
+  # Example:
+  # data:
+  #   config.yaml: |
+  #     key: value
+
+# Secret configuration
+secret:
+  enabled: false
+  data: {}
+  # Example:
+  # data:
+  #   password: base64encodedvalue

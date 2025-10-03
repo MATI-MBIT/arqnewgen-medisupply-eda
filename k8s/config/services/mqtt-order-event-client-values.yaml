@@ -1,0 +1,152 @@
+# ============================================================================
+# CONFIGURACIÓN PARA MQTT ORDER EVENT CLIENT
+# ============================================================================
+# Este archivo replica exactamente la configuración del chart original mqtt-order-event-client
+# 
+# VARIABLES DE ENTORNO GENERADAS:
+# - MQTT_BROKER: tcp://emqx.medilogistic.svc.cluster.local:1883
+# - MQTT_CLIENT_ID: order-event-client-{release-name}
+# - MQTT_TOPIC: events/sensor
+# - MQTT_USERNAME: admin
+# - MQTT_PASSWORD: public
+# - HTTP_PORT: 8080
+# - POD_NAME: {metadata.name}
+# - POD_NAMESPACE: {metadata.namespace}
+#
+# INSTALACIÓN:
+# helm install mqtt-order-event-client ./k8s/microservice -f config/mqtt-order-event-client-values.yaml
+#
+# ACTUALIZACIÓN:
+# helm upgrade mqtt-order-event-client ./k8s/microservice -f config/mqtt-order-event-client-values.yaml
+# ============================================================================
+
+# Configuración básica del deployment
+replicaCount: 1
+
+# Configuración de la imagen Docker
+image:
+  repository: mqtt-order-event-client
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Configuración del servicio Kubernetes
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+# ============================================================================
+# CONFIGURACIÓN MQTT
+# ============================================================================
+mqtt:
+  enabled: true
+  # EMQX service name in the same namespace
+  broker: "tcp://emqx.medilogistic.svc.cluster.local:1883"
+  clientId: "order-event-client"
+  topic: "events/sensor"
+  # Default EMQX credentials (should match emqx chart values)
+  username: "admin"
+  password: "public"
+
+# ============================================================================
+# CONFIGURACIÓN ESPECÍFICA DE LA APLICACIÓN
+# ============================================================================
+# Estas variables se convierten en variables de entorno
+app:
+  config:
+    # Puerto HTTP para el servicio (específico del order-event-client)
+    HTTP_PORT: "8080"
+
+# ============================================================================
+# CONFIGURACIÓN DE KUBERNETES
+# ============================================================================
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Anotaciones del pod (Istio habilitado)
+podAnnotations:
+  sidecar.istio.io/inject: "true"
+
+podSecurityContext: {}
+securityContext: {}
+
+# Recursos del contenedor
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# ============================================================================
+# AUTOSCALING Y SCHEDULING
+# ============================================================================
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ============================================================================
+# HEALTH CHECKS
+# ============================================================================
+# Configuración específica del order-event-client (diferentes tiempos que event-generator)
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# ============================================================================
+# VARIABLES DE ENTORNO ADICIONALES
+# ============================================================================
+env:
+  # Variables comunes (incluidas automáticamente)
+  common:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+  # Variables personalizadas adicionales (si se necesitan)
+  custom: []
+
+# ============================================================================
+# CARACTERÍSTICAS DESHABILITADAS PARA ESTE MICROSERVICIO
+# ============================================================================
+configMap:
+  enabled: false
+
+secret:
+  enabled: false
+
+ingress:
+  enabled: false
