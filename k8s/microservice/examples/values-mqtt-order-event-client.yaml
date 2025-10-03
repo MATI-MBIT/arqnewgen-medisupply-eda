@@ -1,0 +1,55 @@
+# Valores específicos para MQTT Order Event Client
+# Uso: helm install mqtt-order-event-client ./k8s/microservice -f examples/values-mqtt-order-event-client.yaml
+
+image:
+  repository: mqtt-order-event-client
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Configuración MQTT
+mqtt:
+  enabled: true
+  broker: "tcp://emqx.medilogistic.svc.cluster.local:1883"
+  clientId: "order-event-client"
+  topic: "events/sensor"
+  username: "admin"
+  password: "public"
+
+# Configuración específica del cliente
+app:
+  config:
+    HTTP_PORT: "8080"
+
+# Health checks específicos (diferentes tiempos que el event generator)
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Recursos
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Anotaciones para Istio
+podAnnotations:
+  sidecar.istio.io/inject: "true"
