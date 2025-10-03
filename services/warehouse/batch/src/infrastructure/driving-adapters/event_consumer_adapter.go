@@ -19,11 +19,16 @@ type EventConsumerAdapter struct {
 // NewEventConsumerAdapter creates a new EventConsumerAdapter
 func NewEventConsumerAdapter(brokerAddress, topic, groupID string, eventHandler domain.EventHandler) *EventConsumerAdapter {
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  []string{brokerAddress},
-		Topic:    topic,
-		GroupID:  groupID,
-		MinBytes: 10e3, // 10KB
-		MaxBytes: 10e6, // 10MB
+		Brokers:     []string{brokerAddress},
+		Topic:       topic,
+		GroupID:     groupID,
+		MinBytes:    10e3, // 10KB
+		MaxBytes:    10e6, // 10MB
+		StartOffset: kafka.LastOffset,
+		// Add retry and timeout configurations for Kubernetes
+		ReadTimeout:  10 * time.Second,
+		DialTimeout:  10 * time.Second,
+		MaxAttempts:  3,
 	})
 
 	return &EventConsumerAdapter{
@@ -47,6 +52,11 @@ func (adapter *EventConsumerAdapter) Start(ctx context.Context) {
 			msg, err := adapter.reader.ReadMessage(ctx)
 			if err != nil {
 				log.Printf("Error reading message: %v", err)
+				// Add backoff for coordinator errors
+				if isCoordinatorError(err) {
+					log.Println("Group coordinator not available, retrying in 5 seconds...")
+					time.Sleep(5 * time.Second)
+				}
 				continue
 			}
 
@@ -68,6 +78,13 @@ func (adapter *EventConsumerAdapter) translateMessage(msg kafka.Message) domain.
 		Value:     string(msg.Value),
 		Timestamp: time.Now(),
 	}
+}
+
+// isCoordinatorError checks if the error is related to group coordinator
+func isCoordinatorError(err error) bool {
+	return err != nil && (
+		err.Error() == "Group Coordinator Not Available" ||
+		err.Error() == "[15] Group Coordinator Not Available")
 }
 
 // Close closes the Kafka reader

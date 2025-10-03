@@ -195,6 +195,11 @@ deploy:
 		--namespace medisupply \
 		--wait
 
+	@echo "📦 Desplegando Warehouse Batch..."
+	@helm upgrade --install warehouse-batch ./warehouse-batch \
+		--namespace mediwarehouse \
+		--wait
+
 	@echo ""
 	@echo "🎉 ¡Despliegue completado exitosamente!"
 	@echo "📋 Servicios desplegados:"
@@ -203,6 +208,7 @@ deploy:
 	@echo "  ✅ RabbitMQ"
 	@echo "  ✅ MQTT Event Generator"
 	@echo "  ✅ MQTT Order Event Client"
+	@echo "  ✅ Warehouse Batch"
 	@echo "  ✅ MQTT-Kafka Bridge"
 	@echo "  ✅ Kafka Replicator (Replicación Bidireccional)"
 	@echo "  ✅ Kafka-RabbitMQ Replicator (Replicación Bidireccional)"
@@ -244,6 +250,8 @@ clean: ## Eliminar charts del cluster
     # Warehouse
 	@helm uninstall kafka-warehouse --namespace mediwarehouse || true
 	@echo "⚡ Eliminando Kafka..."
+	@echo "📊 Eliminando Warehouse Batch..."
+	@helm uninstall warehouse-batch --namespace mediwarehouse || true
 
     # MediSupply
 	@echo "🔄 Eliminando Kafka Replicator..."
@@ -265,6 +273,7 @@ clean: ## Eliminar charts del cluster
 	@echo ""
 	@echo "✅ Todos los charts eliminados del cluster!"
 	@echo "📋 Servicios eliminados:"
+	@echo "  ❌ Warehouse Batch"
 	@echo "  ❌ MQTT Event Generator"
 	@echo "  ❌ MQTT Order Event Client"
 	@echo "  ❌ MQTT-Kafka Bridge"
