@@ -81,34 +81,34 @@ func (p *Publisher) Close() error {
 func (p *Publisher) PublishOrderDamageFromSensor(ctx context.Context, sensorID, source string, temperature, humidity float64, status, mqttTopic string) error {
 	if p == nil || p.writer == nil {
 		return nil
-    }
+	}
 
-    severity := deriveSeverity(temperature, humidity)
-    evt := OrderDamageEvent{
-        EventID:    sensorID,
-        Type:       "order.damage",
-        Source:     source,
-        OccurredAt: time.Now().UTC(),
-        OrderID:    sensorID,
-        Severity:   severity,
-        Description: fmt.Sprintf("Potential damage detected: temp=%.2fC, humidity=%.2f%%", temperature, humidity),
-        Details: DamageDetails{
-            Temperature: temperature,
-            Humidity:    humidity,
-            Status:      status,
-            MqttTopic:   mqttTopic,
-        },
-    }
+	severity := deriveSeverity(temperature, humidity)
+	evt := OrderDamageEvent{
+		EventID:     sensorID,
+		Type:        "order.damage",
+		Source:      source,
+		OccurredAt:  time.Now().UTC(),
+		OrderID:     sensorID,
+		Severity:    severity,
+		Description: fmt.Sprintf("Potential damage detected: temp=%.2fC, humidity=%.2f%%", temperature, humidity),
+		Details: DamageDetails{
+			Temperature: temperature,
+			Humidity:    humidity,
+			Status:      status,
+			MqttTopic:   mqttTopic,
+		},
+	}
 
-    payload, err := json.Marshal(evt)
-    if err != nil {
-        return err
-    }
+	payload, err := json.Marshal(evt)
+	if err != nil {
+		return err
+	}
 
-    return p.writer.WriteMessages(ctx, kafka.Message{
-        Key:   []byte(evt.OrderID),
-        Value: payload,
-    })
+	return p.writer.WriteMessages(ctx, kafka.Message{
+		Key:   []byte(evt.OrderID),
+		Value: payload,
+	})
 }
 
 func deriveSeverity(temperature, humidity float64) string {
@@ -120,12 +120,6 @@ func deriveSeverity(temperature, humidity float64) string {
 		severity = "critical"
 	}
 	return severity
-}
-
-// Deprecated: kept for backward-compatibility if needed.
-// Prefer using fmt.Sprintf directly where needed.
-func formatFloat(v float64) string {
-	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%f", v), "0"), ".")
 }
 
 func getEnv(key, def string) string {

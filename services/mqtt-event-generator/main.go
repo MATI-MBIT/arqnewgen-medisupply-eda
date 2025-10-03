@@ -18,8 +18,8 @@ import (
 
 var (
 	// Límites de temperatura para la generación aleatoria
-	MinTemperature = 10.0
-	MaxTemperature = 30.0
+	MinTemperature = 07.0
+	MaxTemperature = 12.0
 )
 
 type Event struct {
@@ -157,7 +157,7 @@ func publishEvent(client mqtt.Client, topic string) {
 	if token.Error() != nil {
 		log.Printf("Error publicando evento: %v", token.Error())
 	} else {
-		log.Printf("Evento publicado en topic %s: %s", topic, event.ID)
+		log.Printf("Evento publicado en topic %s: %s %s", topic, event.ID, event.Source)
 	}
 }
 
@@ -166,7 +166,7 @@ func generateEvent() Event {
 		ID:        fmt.Sprintf("evt_%d", time.Now().Unix()),
 		Timestamp: time.Now(),
 		Type:      "sensor_reading",
-		Source:    "temperature_sensor_02",
+		Source:    "temperature_sensor_03",
 		Data: EventData{
 			Temperature: GetTemperatureRandom(MinTemperature, MaxTemperature),
 			Humidity:    50.0 + (float64(time.Now().Unix()%30) - 15), // Simula humedad entre 35-65%
