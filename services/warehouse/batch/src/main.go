@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/application"
 	"github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/config"
 	drivingadapters "github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/infrastructure/driving-adapters"
@@ -16,6 +17,11 @@ import (
 
 func main() {
 	log.Println("Starting warehouse batch application...")
+
+	// Load environment variables from .env file
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: Could not load .env file: %v", err)
+	}
 
 	// Load configuration from environment variables
 	cfg := config.LoadConfig()
