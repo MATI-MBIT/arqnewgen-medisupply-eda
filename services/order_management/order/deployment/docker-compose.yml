@@ -1,0 +1,10 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4.2.0-beta.4-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"   # Port for the application to connect
+      - "15672:15672" # Port for the management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
