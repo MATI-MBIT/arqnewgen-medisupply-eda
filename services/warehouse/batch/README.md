@@ -69,7 +69,6 @@ The application can be configured using environment variables:
 |---------------------|---------------|-------------|
 | `KAFKA_TOPIC` | `my-topic` | Kafka topic to consume from and produce to |
 | `KAFKA_BROKER_ADDRESS` | `localhost:9092` | Kafka broker address |
-| `KAFKA_GROUP_ID` | `my-group` | Kafka consumer group ID |
 | `HTTP_PORT` | `8080` | HTTP port for the API service adapter |
 
 ### Example Configuration
@@ -83,7 +82,6 @@ Edit `.env` with your configuration:
 ```bash
 KAFKA_TOPIC=warehouse-events
 KAFKA_BROKER_ADDRESS=kafka:9092
-KAFKA_GROUP_ID=warehouse-batch-service
 HTTP_PORT=8080
 ```
 
@@ -102,7 +100,6 @@ go run src/main.go
 cd services/warehouse/batch
 export KAFKA_TOPIC=warehouse-events
 export KAFKA_BROKER_ADDRESS=kafka:9092
-export KAFKA_GROUP_ID=warehouse-batch-service
 export HTTP_PORT=8080
 go run src/main.go
 ```
@@ -132,7 +129,6 @@ docker run --rm \
   -p 8080:8080 \
   -e KAFKA_TOPIC=warehouse-events \
   -e KAFKA_BROKER_ADDRESS=kafka:9092 \
-  -e KAFKA_GROUP_ID=warehouse-batch-service \
   -e HTTP_PORT=8080 \
   warehouse-batch-service:latest
 
@@ -176,8 +172,6 @@ spec:
           value: "warehouse-events"
         - name: KAFKA_BROKER_ADDRESS
           value: "kafka:9092"
-        - name: KAFKA_GROUP_ID
-          value: "warehouse-batch-service"
         - name: HTTP_PORT
           value: "8080"
 ```

@@ -36,7 +36,6 @@ USER nonroot:nonroot
 # Set default environment variables
 ENV KAFKA_TOPIC=warehouse-events
 ENV KAFKA_BROKER_ADDRESS=kafka:9092
-ENV KAFKA_GROUP_ID=warehouse-batch-service
 ENV HTTP_PORT=8080
 
 # Expose HTTP port for API service adapter

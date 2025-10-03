@@ -25,8 +25,8 @@ func main() {
 
 	// Load configuration from environment variables
 	cfg := config.LoadConfig()
-	log.Printf("Configuration - Topic: %s, Broker: %s, GroupID: %s, HTTP Port: %s", 
-		cfg.Kafka.Topic, cfg.Kafka.BrokerAddress, cfg.Kafka.GroupID, cfg.HTTP.Port)
+	log.Printf("Configuration - Topic: %s, Broker: %s, HTTP Port: %s", 
+		cfg.Kafka.Topic, cfg.Kafka.BrokerAddress, cfg.HTTP.Port)
 
 	// Create a context that can be cancelled
 	ctx, cancel := context.WithCancel(context.Background())
@@ -40,7 +40,6 @@ func main() {
 	eventConsumerAdapter := drivingadapters.NewEventConsumerAdapter(
 		cfg.Kafka.BrokerAddress,
 		cfg.Kafka.Topic,
-		cfg.Kafka.GroupID,
 		eventService,
 	)
 	

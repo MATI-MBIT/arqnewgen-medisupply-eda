@@ -12,7 +12,6 @@ type Config struct {
 type KafkaConfig struct {
 	Topic         string
 	BrokerAddress string
-	GroupID       string
 }
 
 // HTTPConfig holds HTTP server configuration
@@ -26,7 +25,6 @@ func LoadConfig() *Config {
 		Kafka: KafkaConfig{
 			Topic:         getEnv("KAFKA_TOPIC", "my-topic"),
 			BrokerAddress: getEnv("KAFKA_BROKER_ADDRESS", "localhost:9092"),
-			GroupID:       getEnv("KAFKA_GROUP_ID", "my-group"),
 		},
 		HTTP: HTTPConfig{
 			Port: getEnv("HTTP_PORT", "8080"),
