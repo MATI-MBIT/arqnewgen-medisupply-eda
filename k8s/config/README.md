@@ -2,6 +2,19 @@
 
 Directorio de configuraciones personalizadas para los charts de Helm en la arquitectura Event-Driven de MediSupply. Contiene archivos de valores específicos para diferentes entornos y componentes.
 
+## 📁 Estructura de Configuraciones
+
+```
+k8s/config/
+├── services/                    # Configuraciones de microservicios
+│   ├── mqtt-event-generator-values.yaml
+│   └── mqtt-order-event-client-values.yaml
+├── kafka-values.yaml           # Cluster Kafka principal
+├── kafka-warehouse-values.yaml # Cluster Kafka warehouse
+├── kind-config.yaml           # Configuración Kind
+└── minikube-config.yaml       # Configuración Minikube
+```
+
 ## 📁 Archivos de Configuración
 
 ### Clusters Locales
@@ -20,9 +33,12 @@ Directorio de configuraciones personalizadas para los charts de Helm en la arqui
 
 ### Servicios
 
+Los archivos de configuración de servicios están organizados en el subdirectorio `services/`:
+
 | Archivo | Descripción | Componente |
 |---------|-------------|------------|
-| `mqtt-generator-values.yaml` | Configuración del generador MQTT | mqtt-event-generator |
+| `services/mqtt-event-generator-values.yaml` | Configuración del generador MQTT | mqtt-event-generator |
+| `services/mqtt-order-event-client-values.yaml` | Configuración del cliente MQTT de órdenes | mqtt-order-event-client |
 
 ## 🚀 Uso de Configuraciones
 
@@ -51,10 +67,25 @@ helm install kafka-warehouse ./kafka \
   --namespace mediwarehouse \
   --values ./config/kafka-warehouse-values.yaml
 
-# MQTT Event Generator
-helm install mqtt-event-generator ./mqtt-event-generator \
+# Microservicios (usando el chart genérico)
+helm install mqtt-event-generator ./microservice \
   --namespace medilogistic \
-  --values ./config/mqtt-generator-values.yaml
+  --values ./config/services/mqtt-event-generator-values.yaml
+
+helm install mqtt-order-event-client ./microservice \
+  --namespace medilogistic \
+  --values ./config/services/mqtt-order-event-client-values.yaml
+```
+
+### Usando el Makefile (Recomendado)
+
+```bash
+# Desplegar todos los servicios MQTT
+make deploy-mqtt-services
+
+# O individualmente
+make deploy-mqtt-event-generator
+make deploy-mqtt-order-client
 ```
 
 ## ⚙️ Configuraciones Detalladas
@@ -291,6 +322,18 @@ auth:
   enabled: true
   tls:
     enabled: true
+```
+
+## 🧹 Archivos Obsoletos
+
+Los siguientes archivos pueden estar obsoletos y deberían revisarse para eliminación:
+
+- `mqtt-generator-values.yaml` (raíz) - Reemplazado por `services/mqtt-event-generator-values.yaml`
+
+**Verificar antes de eliminar:**
+```bash
+# Buscar referencias al archivo obsoleto
+grep -r "mqtt-generator-values.yaml" .
 ```
 
 ## 🚨 Troubleshooting
