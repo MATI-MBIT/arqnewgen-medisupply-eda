@@ -8,17 +8,15 @@ This service has been refactored to follow hexagonal architecture principles, pr
 services/warehouse/batch/
 ├── src/
 │   ├── domain/                     # Core business entities and interfaces
-│   │   └── event.go               # Event domain model and EventHandler interface
+│   │   └── order.go               # Order domain models and interfaces
 │   ├── application/               # Business logic and use cases
-│   │   └── event_service.go       # Event processing business logic
+│   │   └── order_service.go       # Order event processing business logic
 │   ├── config/                    # Configuration management
 │   │   └── config.go              # Environment variable configuration
 │   ├── infrastructure/
-│   │   ├── driving-adapters/      # External interfaces that drive the application
-│   │   │   ├── event_consumer_adapter.go  # Kafka event consumer adapter
-│   │   │   └── api_service_adapter.go     # HTTP REST API adapter
-│   │   └── driven-adapters/       # External dependencies driven by the application
-│   │       └── kafka_producer.go  # Kafka producer adapter
+│   │   └── driving-adapters/      # External interfaces that drive the application
+│   │       ├── order_event_consumer_adapter.go  # Order event consumer adapter
+│   │       └── api_service_adapter.go            # HTTP REST API adapter
 │   └── main.go                    # Application entry point and dependency injection
 ├── deployment/
 │   └── Dockerfile                 # Multi-stage Docker build configuration
@@ -32,11 +30,12 @@ services/warehouse/batch/
 ## Components
 
 ### Domain Layer
-- **Event**: Core domain entity representing an event
-- **EventHandler**: Interface defining the contract for event handling
+- **Order**: Core domain entity representing an order
+- **OrderEvent**: Domain entity representing order events
+- **OrderEventHandler**: Interface defining the contract for order event handling
 
 ### Application Layer
-- **EventService**: Contains the business logic for processing events
+- **OrderService**: Contains the business logic for processing order events
 
 ### Configuration Layer
 - **Config**: Manages application configuration from environment variables with sensible defaults
@@ -44,15 +43,12 @@ services/warehouse/batch/
 ### Infrastructure Layer
 
 #### Driving Adapters
-- **EventConsumerAdapter**: 
-  - **Architectural Role**: Adapter that subscribes to message-oriented middleware
-  - **Responsibility**: Listens for asynchronous messages from Kafka, translates external events into domain events that the application layer can understand and execute
+- **OrderEventConsumerAdapter**: 
+  - **Architectural Role**: Adapter that subscribes to order events from Kafka
+  - **Responsibility**: Listens for order events, parses JSON messages, and translates them into domain order events for processing
 - **ApiServiceAdapter**: 
   - **Architectural Role**: HTTP REST API adapter that exposes application capabilities
   - **Responsibility**: Provides synchronous HTTP endpoints for health checks and potential future API operations
-
-#### Driven Adapters
-- **KafkaProducer**: Handles message production to Kafka (for demo purposes)
 
 ## Key Benefits
 
@@ -67,8 +63,9 @@ The application can be configured using environment variables:
 
 | Environment Variable | Default Value | Description |
 |---------------------|---------------|-------------|
-| `KAFKA_TOPIC` | `my-topic` | Kafka topic to consume from and produce to |
+| `KAFKA_ORDER_EVENTS_TOPIC` | `order-events` | Kafka topic for order events |
 | `KAFKA_BROKER_ADDRESS` | `localhost:9092` | Kafka broker address |
+| `KAFKA_GROUP_ID` | `warehouse-batch-service` | Kafka consumer group ID |
 | `HTTP_PORT` | `8080` | HTTP port for the API service adapter |
 
 ### Example Configuration
@@ -80,8 +77,9 @@ cp .env.example .env
 
 Edit `.env` with your configuration:
 ```bash
-KAFKA_TOPIC=warehouse-events
+KAFKA_ORDER_EVENTS_TOPIC=order-events
 KAFKA_BROKER_ADDRESS=kafka:9092
+KAFKA_GROUP_ID=warehouse-batch-service
 HTTP_PORT=8080
 ```
 
@@ -202,15 +200,49 @@ curl http://localhost:8080/health
 curl http://localhost:8080/health
 ```
 
+## Order Events Processing
+
+The warehouse batch service now supports processing order events from the `order-events` topic. It handles the following event types:
+
+- `order.damage_processed` - Processes damage reports and updates inventory status
+- `order.created` - Allocates inventory for new orders
+- `order.cancelled` - Releases allocated inventory
+- `order.shipped` - Updates inventory after shipping
+- `order.delivered` - Confirms delivery and closes warehouse operations
+- `order.returned` - Processes returned items and updates inventory
+- `order.inventory_allocated` - Confirms inventory allocation
+- `order.inventory_released` - Confirms inventory release
+
+### Order Event Format
+
+The service expects order events in the following JSON format:
+
+```json
+{
+  "event_type": "order.damage_processed",
+  "order_id": "evt_1759598824",
+  "order": {
+    "id": "evt_1759598824",
+    "customer_id": "unknown",
+    "product_id": "unknown",
+    "quantity": 1,
+    "status": "damage_detected_minor",
+    "total_amount": 0,
+    "created_at": "2025-10-04T17:27:04.082881166Z",
+    "updated_at": "2025-10-04T17:36:13.584671556Z"
+  },
+  "timestamp": "2025-10-04T17:36:13.58470126Z"
+}
+```
+
 ## Application Behavior
 
 The application will:
 1. Load configuration from environment variables (with fallback to defaults)
-2. Start the EventConsumerAdapter to listen for Kafka messages
+2. Start the OrderEventConsumerAdapter to listen for order events
 3. Start the ApiServiceAdapter to serve HTTP requests on the configured port
-4. Start a KafkaProducer (for demo purposes) to generate test messages
-5. Process incoming events through the EventService
-6. Handle graceful shutdown on SIGINT/SIGTERM signals
+4. Process incoming order events through the OrderService
+5. Handle graceful shutdown on SIGINT/SIGTERM signals
 
 ## Docker Image Features
 

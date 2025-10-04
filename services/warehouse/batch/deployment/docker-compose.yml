@@ -33,10 +33,6 @@ services:
       # Wait for Kafka to be ready
       kafka-topics --bootstrap-server kafka:29092 --list
 
-      echo -e 'Creating kafka topics'
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic warehouse-events --replication-factor 1 --partitions 3
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic order-status-events --replication-factor 1 --partitions 3
-
       echo -e 'Successfully created the following topics:'
       kafka-topics --bootstrap-server kafka:29092 --list
       "

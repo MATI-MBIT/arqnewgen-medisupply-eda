@@ -10,8 +10,9 @@ type Config struct {
 
 // KafkaConfig holds Kafka-specific configuration
 type KafkaConfig struct {
-	Topic         string
-	BrokerAddress string
+	OrderEventsTopic string
+	BrokerAddress    string
+	GroupID          string
 }
 
 // HTTPConfig holds HTTP server configuration
@@ -23,8 +24,9 @@ type HTTPConfig struct {
 func LoadConfig() *Config {
 	return &Config{
 		Kafka: KafkaConfig{
-			Topic:         getEnv("KAFKA_TOPIC", "my-topic"),
-			BrokerAddress: getEnv("KAFKA_BROKER_ADDRESS", "localhost:9092"),
+			OrderEventsTopic: getEnv("KAFKA_ORDER_EVENTS_TOPIC", "order-events"),
+			BrokerAddress:    getEnv("KAFKA_BROKER_ADDRESS", "localhost:9092"),
+			GroupID:          getEnv("KAFKA_GROUP_ID", "warehouse-batch-service"),
 		},
 		HTTP: HTTPConfig{
 			Port: getEnv("HTTP_PORT", "8080"),

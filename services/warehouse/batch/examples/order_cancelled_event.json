@@ -1,0 +1,15 @@
+{
+  "event_type": "order.cancelled",
+  "order_id": "ord_1759598826",
+  "order": {
+    "id": "ord_1759598826",
+    "customer_id": "cust_12346",
+    "product_id": "prod_67891",
+    "quantity": 1,
+    "status": "cancelled",
+    "total_amount": 49.99,
+    "created_at": "2025-10-04T17:30:00.000000000Z",
+    "updated_at": "2025-10-04T18:15:00.000000000Z"
+  },
+  "timestamp": "2025-10-04T18:15:00.000000000Z"
+}
