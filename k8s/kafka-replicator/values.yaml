@@ -23,8 +23,6 @@ replication:
   sourceToTarget:
     enabled: true
     topics:
-      - sourceTopicName: "events-order-damage"
-        targetTopicName: "warehouse-order-damage"
       - sourceTopicName: "order-events"
         targetTopicName: "warehouse-order-events"
 
