@@ -1,0 +1,15 @@
+{
+  "event_type": "order.damage_processed",
+  "order_id": "evt_1759598824",
+  "order": {
+    "id": "evt_1759598824",
+    "customer_id": "unknown",
+    "product_id": "unknown",
+    "quantity": 1,
+    "status": "damage_detected_minor",
+    "total_amount": 0,
+    "created_at": "2025-10-04T17:27:04.082881166Z",
+    "updated_at": "2025-10-04T17:36:13.584671556Z"
+  },
+  "timestamp": "2025-10-04T17:36:13.58470126Z"
+}

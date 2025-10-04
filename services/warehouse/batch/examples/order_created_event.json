@@ -1,0 +1,15 @@
+{
+  "event_type": "order.created",
+  "order_id": "ord_1759598825",
+  "order": {
+    "id": "ord_1759598825",
+    "customer_id": "cust_12345",
+    "product_id": "prod_67890",
+    "quantity": 2,
+    "status": "pending",
+    "total_amount": 99.99,
+    "created_at": "2025-10-04T18:00:00.000000000Z",
+    "updated_at": "2025-10-04T18:00:00.000000000Z"
+  },
+  "timestamp": "2025-10-04T18:00:00.000000000Z"
+}

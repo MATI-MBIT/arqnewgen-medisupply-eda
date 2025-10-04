@@ -12,7 +12,6 @@ import (
 	"github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/application"
 	"github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/config"
 	drivingadapters "github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/infrastructure/driving-adapters"
-	drivenadapters "github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/infrastructure/driven-adapters"
 )
 
 func main() {
@@ -25,38 +24,33 @@ func main() {
 
 	// Load configuration from environment variables
 	cfg := config.LoadConfig()
-	log.Printf("Configuration - Topic: %s, Broker: %s, HTTP Port: %s", 
-		cfg.Kafka.Topic, cfg.Kafka.BrokerAddress, cfg.HTTP.Port)
+	log.Printf("Configuration - Order Events Topic: %s, Group ID: %s, Broker: %s, HTTP Port: %s", 
+		cfg.Kafka.OrderEventsTopic, cfg.Kafka.GroupID, cfg.Kafka.BrokerAddress, cfg.HTTP.Port)
 
 	// Create a context that can be cancelled
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Initialize application layer (business logic)
-	eventService := application.NewEventService()
+	orderService := application.NewOrderService()
 
 	// Initialize driving adapters
-	// EventConsumerAdapter for async event processing
-	eventConsumerAdapter := drivingadapters.NewEventConsumerAdapter(
+	// OrderEventConsumerAdapter for order events processing
+	orderEventConsumerAdapter := drivingadapters.NewOrderEventConsumerAdapter(
 		cfg.Kafka.BrokerAddress,
-		cfg.Kafka.Topic,
-		eventService,
+		cfg.Kafka.OrderEventsTopic,
+		cfg.Kafka.GroupID,
+		orderService,
 	)
 	
 	// ApiServiceAdapter for synchronous HTTP requests
 	apiServiceAdapter := drivingadapters.NewApiServiceAdapter(cfg.HTTP.Port)
 
-	// Initialize driven adapter (KafkaProducer) - optional for demo
-	kafkaProducer := drivenadapters.NewKafkaProducer(cfg.Kafka.BrokerAddress, cfg.Kafka.Topic)
-
-	// Start the event consumer adapter in a goroutine
-	go eventConsumerAdapter.Start(ctx)
+	// Start the order event consumer adapter in a goroutine
+	go orderEventConsumerAdapter.Start(ctx)
 
 	// Start the HTTP API service adapter in a goroutine
 	go apiServiceAdapter.Start(ctx)
-
-	// Start the producer in a goroutine (for demo purposes)
-	go kafkaProducer.StartProducing(ctx)
 
 	// Set up graceful shutdown
 	setupGracefulShutdown(cancel)
