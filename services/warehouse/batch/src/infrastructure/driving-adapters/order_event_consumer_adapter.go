@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/domain"
@@ -41,7 +42,10 @@ func NewOrderEventConsumerAdapter(brokerAddress, topic, groupID string, orderEve
 
 // Start begins consuming order events from the message broker
 func (adapter *OrderEventConsumerAdapter) Start(ctx context.Context) {
-	log.Printf("Starting order event consumer adapter with group ID: %s", adapter.reader.Config().GroupID)
+	config := adapter.reader.Config()
+	log.Printf("Starting order event consumer adapter with group ID: %s", config.GroupID)
+	log.Printf("Consuming from topic: %s, brokers: %v", config.Topic, config.Brokers)
+	log.Printf("Waiting for order events... (timeout errors are normal when no messages are available)")
 	
 	for {
 		select {
@@ -58,7 +62,10 @@ func (adapter *OrderEventConsumerAdapter) Start(ctx context.Context) {
 			cancel()
 			
 			if err != nil {
-				log.Printf("Error reading order event message: %v", err)
+				// Only log non-timeout errors to reduce noise
+				if !strings.Contains(err.Error(), "context deadline exceeded") {
+					log.Printf("Error reading order event message: %v", err)
+				}
 				// Add backoff for connection errors
 				time.Sleep(2 * time.Second)
 				continue
