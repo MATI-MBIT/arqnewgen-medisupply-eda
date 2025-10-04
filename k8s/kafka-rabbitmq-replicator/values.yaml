@@ -37,17 +37,12 @@ replication:
         rabbitmqExchange: "events"
         rabbitmqExchangeType: "direct"
         rabbitmqRoutingKey: "order.damage"
-      - kafkaTopic: "events-sensor"
-        rabbitmqQueue: "sensor-queue"
-        rabbitmqExchange: "events"
-        rabbitmqExchangeType: "direct"
-        rabbitmqRoutingKey: "sensor.data"
 
   rabbitmqToKafka:
-    enabled: false
-    mappings: []
-    #  - rabbitmqQueue: "warehouse-events"
-    #    kafkaTopic: "warehouse-events"
+    enabled: true
+    mappings:
+     - rabbitmqQueue: "order-events-queue"
+       kafkaTopic: "order-events"
     #  - rabbitmqQueue: "notifications"
     #    kafkaTopic: "notifications"
 

@@ -489,10 +489,22 @@ class KafkaRabbitMQReplicator:
         """Process message from RabbitMQ to Kafka"""
         try:
             # Find mapping for this queue
-            queue_name = method.routing_key if method.exchange == '' else None
+            # The queue name should be available from the consumer setup
+            # We need to track which consumer_tag corresponds to which queue
+            queue_name = None
+            
+            # Try to get queue name from consumer tag mapping
+            consumer_tag = getattr(method, 'consumer_tag', None)
+            if hasattr(self, 'consumer_tag_to_queue') and consumer_tag in self.consumer_tag_to_queue:
+                queue_name = self.consumer_tag_to_queue[consumer_tag]
+            
+            # Fallback: try routing key for default exchange
+            if not queue_name and method.exchange == '':
+                queue_name = method.routing_key
+            
+            # Last resort: use consumer tag (this will cause the warning)
             if not queue_name:
-                # Try to get queue name from method
-                queue_name = getattr(method, 'consumer_tag', 'unknown')
+                queue_name = consumer_tag or 'unknown'
             
             mapping = None
             for m in self.mappings:
@@ -687,16 +699,22 @@ class KafkaRabbitMQReplicator:
         
         self.logger.info("=== R2K REPLICATION STARTED ===")
         
+        # Initialize consumer tag to queue mapping
+        self.consumer_tag_to_queue = {}
+        
         # Setup consumers for each queue
         for mapping in self.mappings:
             queue = mapping.get('rabbitmqQueue')
             if queue:
                 self.logger.info(f"Setting up consumer for queue: {queue}")
-                self.rabbitmq_channel.basic_consume(
+                consumer_tag = self.rabbitmq_channel.basic_consume(
                     queue=queue,
                     on_message_callback=self.process_rabbitmq_message,
                     auto_ack=False
                 )
+                # Track the consumer tag to queue mapping
+                self.consumer_tag_to_queue[consumer_tag] = queue
+                self.logger.info(f"✅ Consumer setup complete: {consumer_tag} -> {queue}")
         
         self.logger.info("Listening for RabbitMQ messages...")
         

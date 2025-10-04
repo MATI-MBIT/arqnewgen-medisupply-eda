@@ -14,11 +14,12 @@ type RabbitMQPublisher struct {
 	conn         *amqp.Connection
 	channel      *amqp.Channel
 	exchangeName string
+	queueName    string
 	routingKey   string
 }
 
 // NewRabbitMQPublisher creates a new RabbitMQPublisher
-func NewRabbitMQPublisher(rabbitMQURL, exchangeName, routingKey string) (*RabbitMQPublisher, error) {
+func NewRabbitMQPublisher(rabbitMQURL, exchangeName, queueName, routingKey string) (*RabbitMQPublisher, error) {
 	conn, err := amqp.Dial(rabbitMQURL)
 	if err != nil {
 		return nil, err
@@ -46,10 +47,43 @@ func NewRabbitMQPublisher(rabbitMQURL, exchangeName, routingKey string) (*Rabbit
 		return nil, err
 	}
 
+	// Declare the queue for order events
+	_, err = channel.QueueDeclare(
+		queueName, // name
+		true,      // durable
+		false,     // delete when unused
+		false,     // exclusive
+		false,     // no-wait
+		nil,       // arguments
+	)
+	if err != nil {
+		channel.Close()
+		conn.Close()
+		return nil, err
+	}
+
+	// Bind the queue to the exchange
+	err = channel.QueueBind(
+		queueName,    // queue name
+		routingKey,   // routing key
+		exchangeName, // exchange
+		false,
+		nil,
+	)
+	if err != nil {
+		channel.Close()
+		conn.Close()
+		return nil, err
+	}
+
+	log.Printf("RabbitMQ Publisher initialized - Exchange: %s, Queue: %s, RoutingKey: %s", 
+		exchangeName, queueName, routingKey)
+
 	return &RabbitMQPublisher{
 		conn:         conn,
 		channel:      channel,
 		exchangeName: exchangeName,
+		queueName:    queueName,
 		routingKey:   routingKey,
 	}, nil
 }

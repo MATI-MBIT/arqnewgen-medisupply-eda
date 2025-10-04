@@ -3,7 +3,7 @@ services:
     image: rabbitmq:4.2.0-beta.4-management-alpine
     container_name: rabbitmq
     ports:
-      - "5672:5672"   # Port for the application to connect
+      - "5672:5672" # Port for the application to connect
       - "15672:15672" # Port for the management UI
     environment:
       - RABBITMQ_DEFAULT_USER=guest
@@ -31,12 +31,12 @@ services:
       # Create exchange and queues
       echo 'Creating RabbitMQ exchange and queues...'
       rabbitmqadmin -H rabbitmq -u guest -p guest declare exchange name=events type=direct durable=true
-      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=order-queue durable=true
       rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=order-damage-queue durable=true
-      
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=order-events-queue durable=true
+
       # Create bindings
-      rabbitmqadmin -H rabbitmq -u guest -p guest declare binding source=events destination=order-queue routing_key=order.created
       rabbitmqadmin -H rabbitmq -u guest -p guest declare binding source=events destination=order-damage-queue routing_key=order.damage
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare binding source=events destination=order-events-queue routing_key=order.events
 
       echo 'RabbitMQ setup completed successfully!'
       "
@@ -52,12 +52,16 @@ services:
       rabbitmq-init:
         condition: service_completed_successfully
     ports:
-      - "8080:8080"   # HTTP API port
+      - "8080:8080" # HTTP API port
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - RABBITMQ_EXCHANGE=events
-      - RABBITMQ_QUEUE=order-damage-queue
-      - RABBITMQ_ROUTING_KEY=order.damage
+      # Consumer configuration (for receiving damage events)
+      - RABBITMQ_CONSUMER_QUEUE=order-damage-queue
+      - RABBITMQ_CONSUMER_ROUTING_KEY=order.damage
+      # Publisher configuration (for publishing order events)
+      - RABBITMQ_PUBLISHER_QUEUE=order-events-queue
+      - RABBITMQ_PUBLISHER_ROUTING_KEY=order.events
       - HTTP_PORT=8080
     # Note: Health check disabled for distroless image (no shell/wget available)
     # Health check can be performed externally via HTTP GET to /health endpoint

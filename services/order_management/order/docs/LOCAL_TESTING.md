@@ -38,12 +38,25 @@ docker logs order-management
 
 ## Testing Methods
 
-### Method 1: Python Test Script (Recommended)
+### Method 1: Complete Flow Test (Recommended)
 
 ```bash
 # Install required Python package
 pip install pika
 
+# Run complete flow test (sends damage events and monitors order events)
+python test/test_complete_flow.py
+
+# This will test:
+# - Single minor damage event
+# - Multiple severity levels
+# - Escalating damage on same order
+```
+
+### Method 2: Individual Component Testing
+
+#### Send Damage Events
+```bash
 # Send a minor damage event
 python test/send_damage_event.py --severity minor
 
@@ -59,17 +72,13 @@ python test/send_damage_event.py --severity critical --count 3
 # --count: Number of events to send (default: 1)
 ```
 
-### Method 2: Bash Test Script
-
+#### Monitor Order Events
 ```bash
-# Send a minor damage event
-./test/send_damage_event.sh minor
+# Monitor order events in real-time
+python test/monitor_order_events.py
 
-# Send a major damage event with specific order ID
-./test/send_damage_event.sh major ORDER456
-
-# Send a critical damage event
-./test/send_damage_event.sh critical ORDER789
+# Check queue status only
+python test/monitor_order_events.py --status
 ```
 
 ### Method 3: Manual RabbitMQ Management UI
@@ -126,8 +135,18 @@ Order ORDER_123 status updated to: damage_detected_minor
 1. Open http://localhost:15672
 2. Go to "Queues" tab
 3. Check message counts in:
-   - `order-damage-queue` (should decrease as messages are consumed)
+   - `order-damage-queue` (input - should decrease as damage events are consumed)
+   - `order-events-queue` (output - should increase as order events are published)
    - Check "Message rates" for activity
+
+### Queue Configuration
+
+The service now uses two separate queues:
+
+| Queue | Purpose | Routing Key | Description |
+|-------|---------|-------------|-------------|
+| `order-damage-queue` | Input | `order.damage` | Receives damage events from MQTT/sensors |
+| `order-events-queue` | Output | `order.events` | Publishes order lifecycle events |
 
 ### Health Check
 

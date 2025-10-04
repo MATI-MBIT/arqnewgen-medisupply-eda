@@ -25,8 +25,9 @@ func main() {
 
 	// Load configuration from environment variables
 	cfg := config.LoadConfig()
-	log.Printf("Configuration - Exchange: %s, Queue: %s, HTTP Port: %s", 
-		cfg.RabbitMQ.ExchangeName, cfg.RabbitMQ.QueueName, cfg.HTTP.Port)
+	log.Printf("Configuration - Exchange: %s, Consumer Queue: %s, Publisher Queue: %s, HTTP Port: %s", 
+		cfg.RabbitMQ.ExchangeName, cfg.RabbitMQ.ConsumerQueueName, cfg.RabbitMQ.PublisherQueueName, cfg.HTTP.Port)
+	log.Printf("RabbitMQ URL: %s", cfg.RabbitMQ.URL)
 
 	// Create a context that can be cancelled
 	ctx, cancel := context.WithCancel(context.Background())
@@ -40,7 +41,8 @@ func main() {
 	eventPublisher, err := drivenadapters.NewRabbitMQPublisher(
 		cfg.RabbitMQ.URL,
 		cfg.RabbitMQ.ExchangeName,
-		cfg.RabbitMQ.RoutingKey,
+		cfg.RabbitMQ.PublisherQueueName,
+		cfg.RabbitMQ.PublisherRoutingKey,
 	)
 	if err != nil {
 		log.Fatalf("Failed to create RabbitMQ publisher: %v", err)
@@ -55,8 +57,8 @@ func main() {
 	orderConsumerAdapter, err := drivingadapters.NewOrderConsumerAdapter(
 		cfg.RabbitMQ.URL,
 		cfg.RabbitMQ.ExchangeName,
-		cfg.RabbitMQ.QueueName,
-		cfg.RabbitMQ.RoutingKey,
+		cfg.RabbitMQ.ConsumerQueueName,
+		cfg.RabbitMQ.ConsumerRoutingKey,
 		orderService,
 	)
 	if err != nil {

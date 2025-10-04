@@ -21,11 +21,17 @@ service:
 # Estas variables se convierten en variables de entorno
 app:
   config:
-    # RabbitMQ Configuration
-    RABBITMQ_URL: "amqp://user:password@rabbitmq.mediorder.svc.cluster.local:5672/"
+    # RabbitMQ Configuration (base URL without password)
+    RABBITMQ_HOST: "rabbitmq.mediorder.svc.cluster.local"
+    RABBITMQ_PORT: "5672"
+    RABBITMQ_USER: "user"
     RABBITMQ_EXCHANGE: "events"
-    RABBITMQ_QUEUE: "order-damage-queue"
-    RABBITMQ_ROUTING_KEY: "order.damage"
+    # Consumer configuration (for receiving damage events)
+    RABBITMQ_CONSUMER_QUEUE: "order-damage-queue"
+    RABBITMQ_CONSUMER_ROUTING_KEY: "order.damage"
+    # Publisher configuration (for publishing order events)
+    RABBITMQ_PUBLISHER_QUEUE: "order-events-queue"
+    RABBITMQ_PUBLISHER_ROUTING_KEY: "order.events"
 
     # HTTP Server Configuration
     HTTP_PORT: "8080"
@@ -102,9 +108,8 @@ env:
         secretKeyRef:
           name: rabbitmq
           key: rabbitmq-password
-    # Override RABBITMQ_URL with password from secret
-    - name: RABBITMQ_URL
-      value: "amqp://user:$(RABBITMQ_PASSWORD)@rabbitmq.mediorder.svc.cluster.local:5672/"
+    # Construct RABBITMQ_URL using init container or application logic
+    # For now, we'll let the application construct the URL from components
 
 # ============================================================================
 # CONFIGURACIÓN DE RABBITMQ

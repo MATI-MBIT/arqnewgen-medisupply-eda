@@ -33,12 +33,8 @@ COPY --from=builder /app/order-management-service /order-management-service
 # Use non-root user for security
 USER nonroot:nonroot
 
-# Set default environment variables for RabbitMQ and HTTP
-ENV RABBITMQ_URL=amqp://guest:guest@localhost:5672/
-ENV RABBITMQ_EXCHANGE=order-exchange
-ENV RABBITMQ_QUEUE=order-queue
-ENV RABBITMQ_ROUTING_KEY=order.created
-ENV HTTP_PORT=8081
+# Set default environment variables for HTTP
+ENV HTTP_PORT=8080
 
 # Expose HTTP port for API service adapter
 EXPOSE 8080
