@@ -224,7 +224,7 @@ deploy:
 
     # Warehouse
 	@echo "📦 Desplegando Warehouse Batch..."
-#	@helm upgrade --install warehouse-batch ./microservice \
+	@helm upgrade --install warehouse-batch ./microservice \
 		--namespace mediwarehouse \
 		--values ./config/services/warehouse/batch/batch-service-values.yaml \
 		--wait
@@ -290,7 +290,7 @@ clean: ## Eliminar charts del cluster
 	@helm uninstall kafka-warehouse --namespace mediwarehouse || true
 	@echo "⚡ Eliminando Kafka..."
 	@echo "📊 Eliminando Warehouse Batch..."
-#	@helm uninstall warehouse-batch --namespace mediwarehouse || true
+	@helm uninstall warehouse-batch --namespace mediwarehouse || true
 
     # MediSupply
 	@echo "🔄 Eliminando Kafka Replicator..."
