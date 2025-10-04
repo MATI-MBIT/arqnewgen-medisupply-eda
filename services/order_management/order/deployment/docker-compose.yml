@@ -28,11 +28,15 @@ services:
       echo 'Waiting for RabbitMQ to be ready...'
       sleep 10
 
-      # Create exchange and queue
-      echo 'Creating RabbitMQ exchange and queue...'
-      rabbitmqadmin -H rabbitmq -u guest -p guest declare exchange name=order-exchange type=direct durable=true
+      # Create exchange and queues
+      echo 'Creating RabbitMQ exchange and queues...'
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare exchange name=events type=direct durable=true
       rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=order-queue durable=true
-      rabbitmqadmin -H rabbitmq -u guest -p guest declare binding source=order-exchange destination=order-queue routing_key=order.created
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=order-damage-queue durable=true
+      
+      # Create bindings
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare binding source=events destination=order-queue routing_key=order.created
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare binding source=events destination=order-damage-queue routing_key=order.damage
 
       echo 'RabbitMQ setup completed successfully!'
       "
@@ -48,13 +52,13 @@ services:
       rabbitmq-init:
         condition: service_completed_successfully
     ports:
-      - "8081:8081"   # HTTP API port
+      - "8080:8080"   # HTTP API port
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
-      - RABBITMQ_EXCHANGE=order-exchange
-      - RABBITMQ_QUEUE=order-queue
-      - RABBITMQ_ROUTING_KEY=order.created
-      - HTTP_PORT=8081
+      - RABBITMQ_EXCHANGE=events
+      - RABBITMQ_QUEUE=order-damage-queue
+      - RABBITMQ_ROUTING_KEY=order.damage
+      - HTTP_PORT=8080
     # Note: Health check disabled for distroless image (no shell/wget available)
     # Health check can be performed externally via HTTP GET to /health endpoint
     restart: unless-stopped

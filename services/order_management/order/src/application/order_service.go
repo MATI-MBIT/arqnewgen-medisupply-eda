@@ -121,3 +121,92 @@ func (s *OrderService) HandleOrderEvent(event domain.OrderEvent) error {
 	
 	return nil
 }
+
+// HandleOrderDamageEvent processes incoming order damage events from MQTT
+func (s *OrderService) HandleOrderDamageEvent(event domain.OrderDamageEvent) error {
+	log.Printf("Processing order damage event: EventID=%s, OrderID=%s, Severity=%s, OccurredAt=%s", 
+		event.EventID, event.OrderID, event.Severity, event.OccurredAt.Format("2006-01-02 15:04:05"))
+	
+	log.Printf("Damage details: Temperature=%.2f°C, Humidity=%d%%, Status=%s", 
+		event.Details.Temperature, event.Details.Humidity, event.Details.Status)
+	
+	log.Printf("Damage description: %s", event.Description)
+	
+	// Check if order exists, if not create a new one
+	order, err := s.orderRepo.FindByID(event.OrderID)
+	if err != nil {
+		log.Printf("Order %s not found, creating new order from damage event", event.OrderID)
+		
+		// Create new order with the received order ID
+		newOrder := domain.Order{
+			ID:          event.OrderID,
+			CustomerID:  "unknown", // Default value since not provided in damage event
+			ProductID:   "unknown", // Default value since not provided in damage event
+			Quantity:    1,         // Default value
+			Status:      "created_from_damage_event",
+			TotalAmount: 0.0,       // Default value
+			CreatedAt:   event.OccurredAt,
+			UpdatedAt:   time.Now(),
+		}
+		
+		// Save the new order
+		if err := s.orderRepo.Save(newOrder); err != nil {
+			return fmt.Errorf("failed to create order from damage event: %w", err)
+		}
+		
+		log.Printf("Created new order from damage event: ID=%s", newOrder.ID)
+		order = &newOrder
+	} else {
+		log.Printf("Found existing order %s", event.OrderID)
+	}
+	
+	// Determine the new status based on damage severity
+	var newStatus string
+	switch event.Severity {
+	case "minor":
+		log.Printf("Minor damage detected for order %s - monitoring required", event.OrderID)
+		newStatus = "damage_detected_minor"
+		
+	case "major":
+		log.Printf("Major damage detected for order %s - immediate action required", event.OrderID)
+		newStatus = "damage_detected_major"
+		
+	case "critical":
+		log.Printf("Critical damage detected for order %s - order should be cancelled", event.OrderID)
+		newStatus = "cancelled_damage"
+		
+	default:
+		log.Printf("Unknown damage severity: %s for order %s", event.Severity, event.OrderID)
+		newStatus = "damage_detected_unknown"
+	}
+	
+	// Update order status
+	order.Status = newStatus
+	order.UpdatedAt = time.Now()
+	
+	if err := s.orderRepo.Update(*order); err != nil {
+		return fmt.Errorf("failed to update order status after damage event: %w", err)
+	}
+	
+	// Publish order updated event
+	orderEvent := domain.OrderEvent{
+		EventType: "order.damage_processed",
+		OrderID:   order.ID,
+		Order:     *order,
+		Timestamp: time.Now(),
+	}
+	
+	if err := s.eventPublisher.PublishOrderEvent(orderEvent); err != nil {
+		log.Printf("Failed to publish order damage processed event: %v", err)
+	}
+	
+	log.Printf("Order %s status updated to: %s", order.ID, order.Status)
+	
+	// Additional business logic could include:
+	// - Sending notifications to warehouse staff
+	// - Creating damage reports
+	// - Triggering insurance claims
+	// - Updating inventory status
+	
+	return nil
+}

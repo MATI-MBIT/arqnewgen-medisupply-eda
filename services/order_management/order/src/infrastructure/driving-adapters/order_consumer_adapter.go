@@ -128,9 +128,21 @@ func (adapter *OrderConsumerAdapter) Start(ctx context.Context) {
 				continue
 			}
 
-			// Handle the event through the application layer
-			if err := adapter.eventHandler.HandleOrderEvent(event); err != nil {
-				log.Printf("Error handling order event: %v", err)
+			// Handle the event through the application layer based on event type
+			var handlingErr error
+			switch e := event.(type) {
+			case domain.OrderDamageEvent:
+				handlingErr = adapter.eventHandler.HandleOrderDamageEvent(e)
+			case domain.OrderEvent:
+				handlingErr = adapter.eventHandler.HandleOrderEvent(e)
+			default:
+				log.Printf("Unknown event type received: %T", e)
+				delivery.Nack(false, false) // Reject unknown event types
+				continue
+			}
+
+			if handlingErr != nil {
+				log.Printf("Error handling event: %v", handlingErr)
 				delivery.Nack(false, true) // Reject and requeue for retry
 			} else {
 				delivery.Ack(false) // Acknowledge successful processing
@@ -140,10 +152,18 @@ func (adapter *OrderConsumerAdapter) Start(ctx context.Context) {
 }
 
 // translateMessage converts a RabbitMQ message to a domain order event
-func (adapter *OrderConsumerAdapter) translateMessage(body []byte) (domain.OrderEvent, error) {
+func (adapter *OrderConsumerAdapter) translateMessage(body []byte) (interface{}, error) {
+	// First try to unmarshal as MQTT order event (for order damage events)
+	var mqttEvent domain.MQTTOrderEvent
+	if err := json.Unmarshal(body, &mqttEvent); err == nil {
+		// Check if this is an order damage event
+		if mqttEvent.MqttTopic == "events/order-damage" {
+			return adapter.handleOrderDamageEvent(mqttEvent)
+		}
+	}
+
+	// Try to unmarshal as regular order event
 	var event domain.OrderEvent
-	
-	// Try to unmarshal as JSON first
 	if err := json.Unmarshal(body, &event); err == nil {
 		return event, nil
 	}
@@ -157,6 +177,21 @@ func (adapter *OrderConsumerAdapter) translateMessage(body []byte) (domain.Order
 
 	log.Printf("Received non-JSON message, created simple event: %s", string(body))
 	return event, nil
+}
+
+// handleOrderDamageEvent processes order damage events from MQTT
+func (adapter *OrderConsumerAdapter) handleOrderDamageEvent(mqttEvent domain.MQTTOrderEvent) (domain.OrderDamageEvent, error) {
+	var damageEvent domain.OrderDamageEvent
+	
+	// Parse the nested JSON payload
+	if err := json.Unmarshal([]byte(mqttEvent.Payload), &damageEvent); err != nil {
+		return damageEvent, err
+	}
+
+	log.Printf("Received order damage event: OrderID=%s, Severity=%s, Description=%s", 
+		damageEvent.OrderID, damageEvent.Severity, damageEvent.Description)
+	
+	return damageEvent, nil
 }
 
 // Close closes the RabbitMQ connection and channel
