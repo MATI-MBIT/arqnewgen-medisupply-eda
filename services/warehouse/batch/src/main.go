@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/application"
 	"github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/config"
+	drivenadapters "github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/infrastructure/driven-adapters"
 	drivingadapters "github.com/MATI-MBIT/arqnewgen-medisupply-eda/simple-service/batch/src/infrastructure/driving-adapters"
 )
 
@@ -31,8 +32,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Initialize driven adapters (repositories)
+	batchRepo := drivenadapters.NewBatchMemoryRepository()
+	
 	// Initialize application layer (business logic)
-	orderService := application.NewOrderService()
+	batchService := application.NewBatchService(batchRepo)
+	orderService := application.NewOrderService(batchService)
 
 	// Initialize driving adapters
 	// OrderEventConsumerAdapter for order events processing
@@ -44,7 +49,7 @@ func main() {
 	)
 	
 	// ApiServiceAdapter for synchronous HTTP requests
-	apiServiceAdapter := drivingadapters.NewApiServiceAdapter(cfg.HTTP.Port)
+	apiServiceAdapter := drivingadapters.NewApiServiceAdapter(cfg.HTTP.Port, batchService)
 
 	// Start the order event consumer adapter in a goroutine
 	go orderEventConsumerAdapter.Start(ctx)

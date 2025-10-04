@@ -1,0 +1,130 @@
+{
+  "damage_processing_scenarios": {
+    "scenario_1_new_order_minor_damage": {
+      "description": "Order with minor damage that doesn't exist in any batch yet",
+      "event": {
+        "event_type": "order.damage_processed",
+        "order_id": "order-damage-001",
+        "order": {
+          "id": "order-damage-001",
+          "customer_id": "customer-123",
+          "product_id": "product-medical-supplies-456",
+          "quantity": 2,
+          "status": "damage_detected_minor",
+          "total_amount": 150.00,
+          "created_at": "2025-10-04T10:00:00Z",
+          "updated_at": "2025-10-04T10:30:00Z"
+        },
+        "timestamp": "2025-10-04T10:30:00Z"
+      },
+      "expected_behavior": {
+        "action": "Creates new batch with order",
+        "batch_status": "pending",
+        "order_status_in_batch": "damage_minor",
+        "batch_marked_damaged": false
+      }
+    },
+    "scenario_2_new_order_major_damage": {
+      "description": "Order with major damage that doesn't exist in any batch yet",
+      "event": {
+        "event_type": "order.damage_processed",
+        "order_id": "order-damage-002",
+        "order": {
+          "id": "order-damage-002",
+          "customer_id": "customer-456",
+          "product_id": "product-medical-supplies-789",
+          "quantity": 5,
+          "status": "damage_detected_major",
+          "total_amount": 500.00,
+          "created_at": "2025-10-04T11:00:00Z",
+          "updated_at": "2025-10-04T11:45:00Z"
+        },
+        "timestamp": "2025-10-04T11:45:00Z"
+      },
+      "expected_behavior": {
+        "action": "Creates new batch with order and marks batch as damaged",
+        "batch_status": "damaged",
+        "order_status_in_batch": "damage_major",
+        "batch_marked_damaged": true
+      }
+    },
+    "scenario_3_existing_order_damage": {
+      "description": "Order that already exists in a batch gets damaged",
+      "prerequisite": "Order already exists in batch with status 'allocated'",
+      "event": {
+        "event_type": "order.damage_processed",
+        "order_id": "order-existing-003",
+        "order": {
+          "id": "order-existing-003",
+          "customer_id": "customer-789",
+          "product_id": "product-medical-supplies-123",
+          "quantity": 3,
+          "status": "damage_detected_major",
+          "total_amount": 300.00,
+          "created_at": "2025-10-04T09:00:00Z",
+          "updated_at": "2025-10-04T12:00:00Z"
+        },
+        "timestamp": "2025-10-04T12:00:00Z"
+      },
+      "expected_behavior": {
+        "action": "Updates existing order status and marks batch as damaged",
+        "batch_status": "damaged",
+        "order_status_in_batch": "damage_major",
+        "batch_marked_damaged": true
+      }
+    },
+    "scenario_4_damage_processed_completion": {
+      "description": "Damage processing completion for an order",
+      "event": {
+        "event_type": "order.damage_processed",
+        "order_id": "order-damage-004",
+        "order": {
+          "id": "order-damage-004",
+          "customer_id": "customer-101",
+          "product_id": "product-medical-supplies-999",
+          "quantity": 1,
+          "status": "damage_processed",
+          "total_amount": 75.00,
+          "created_at": "2025-10-04T08:00:00Z",
+          "updated_at": "2025-10-04T13:00:00Z"
+        },
+        "timestamp": "2025-10-04T13:00:00Z"
+      },
+      "expected_behavior": {
+        "action": "Creates new batch or updates existing order with processed status",
+        "batch_status": "pending",
+        "order_status_in_batch": "damage_processed",
+        "batch_marked_damaged": false
+      }
+    }
+  },
+  "api_queries_after_damage_processing": {
+    "get_damaged_batches": {
+      "method": "GET",
+      "url": "http://localhost:8080/api/v1/batches/status/damaged",
+      "description": "Retrieve all batches marked as damaged"
+    },
+    "get_batch_for_damaged_order": {
+      "method": "GET", 
+      "url": "http://localhost:8080/api/v1/batches/order/order-damage-001",
+      "description": "Find the batch containing a specific damaged order"
+    },
+    "get_all_batches_for_product": {
+      "method": "GET",
+      "url": "http://localhost:8080/api/v1/batches/product/product-medical-supplies-456",
+      "description": "Get all batches (including damaged ones) for a specific product"
+    }
+  },
+  "damage_status_mapping": {
+    "damage_detected_minor": "damage_minor",
+    "damage_detected_major": "damage_major", 
+    "damage_processed": "damage_processed"
+  },
+  "business_rules": {
+    "minor_damage": "Creates batch but doesn't mark it as damaged - allows for inspection and potential recovery",
+    "major_damage": "Creates batch and immediately marks it as damaged - indicates significant loss",
+    "damage_processed": "Indicates damage handling is complete - order may be written off or replaced",
+    "batch_creation": "If order doesn't exist in any batch, a new batch is automatically created",
+    "batch_grouping": "Orders for the same product are grouped into the same batch when possible"
+  }
+}

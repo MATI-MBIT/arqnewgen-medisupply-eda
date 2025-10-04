@@ -1,0 +1,58 @@
+{
+  "example_batch": {
+    "id": "BATCH-product-456-20251004141444",
+    "product_id": "product-456",
+    "status": "pending",
+    "items": [
+      {
+        "order_id": "order-123",
+        "product_id": "product-456",
+        "quantity": 10,
+        "status": "allocated",
+        "added_at": "2025-10-04T14:14:44Z",
+        "processed_at": null
+      },
+      {
+        "order_id": "order-124",
+        "product_id": "product-456",
+        "quantity": 5,
+        "status": "allocated",
+        "added_at": "2025-10-04T14:15:30Z",
+        "processed_at": null
+      }
+    ],
+    "total_items": 2,
+    "created_at": "2025-10-04T14:14:44Z",
+    "updated_at": "2025-10-04T14:15:30Z",
+    "processed_at": null
+  },
+  "api_examples": {
+    "get_all_batches": {
+      "method": "GET",
+      "url": "http://localhost:8080/api/v1/batches",
+      "description": "Retrieve all batches in the system"
+    },
+    "get_batches_by_product": {
+      "method": "GET",
+      "url": "http://localhost:8080/api/v1/batches/product/product-456",
+      "description": "Get all batches for a specific product"
+    },
+    "get_batches_by_status": {
+      "method": "GET",
+      "url": "http://localhost:8080/api/v1/batches/status/pending",
+      "description": "Get all batches with pending status"
+    },
+    "get_batch_by_order": {
+      "method": "GET",
+      "url": "http://localhost:8080/api/v1/batches/order/order-123",
+      "description": "Find the batch containing a specific order"
+    }
+  },
+  "batch_statuses": [
+    "pending",
+    "processing", 
+    "completed",
+    "cancelled",
+    "damaged"
+  ]
+}

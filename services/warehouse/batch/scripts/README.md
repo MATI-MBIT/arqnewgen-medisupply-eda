@@ -58,6 +58,32 @@ python3 scripts/test_local.py run
 - 🔍 Dependency checking
 - 🚀 Service execution
 
+## Additional Scripts
+
+### send_test_event.py
+
+Script to send test order events to Kafka for testing the warehouse batch service.
+
+**Installation:**
+```bash
+pip install -r scripts/requirements.txt
+```
+
+**Usage:**
+```bash
+# Send a single damage event
+python3 scripts/send_test_event.py
+
+# Send a creation event
+python3 scripts/send_test_event.py --event-type order.created
+
+# Send multiple events
+python3 scripts/send_test_event.py --count 5
+
+# Send to different broker/topic
+python3 scripts/send_test_event.py --broker kafka:9092 --topic order-events
+```
+
 ### Environment Variables
 
 The script sets these default environment variables:
