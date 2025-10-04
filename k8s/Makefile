@@ -5,7 +5,7 @@ CLUSTER_NAME := local-k8s
 KUBECONFIG_PATH := ~/.kube/config
 PROVIDER := $(or $(PROVIDER),kind)
 
-.PHONY: help init deploy clean destroy kiali kafka-ui mqtt rabbitmq kafka-rabbitmq-replicator kafka-rabbitmq-replicator-logs kafka-rabbitmq-replicator-status
+.PHONY: help init deploy clean destroy kiali kafka-ui mqtt rabbitmq kafka-rabbitmq-replicator kafka-rabbitmq-replicator-logs kafka-rabbitmq-replicator-status create-kafka-topics wait-for-kafka create-topic-if-not-exists create-rabbitmq-resources wait-for-rabbitmq
 
 help: ## Mostrar ayuda
 	@echo "Comandos disponibles:"
@@ -36,6 +36,8 @@ help: ## Mostrar ayuda
 	@echo "  make kafka-ui          # Abrir Kafka UI dashboard"
 	@echo "  make mqtt              # Abrir EMQX dashboard"
 	@echo "  make rabbitmq          # Abrir RabbitMQ Management UI"
+	@echo "  make create-kafka-topics # Crear topics necesarios para replicación"
+	@echo "  make create-rabbitmq-resources # Crear queues y exchanges de RabbitMQ"
 	@echo "  kafka-rabbitmq-replicator-logs   # Ver logs del replicador Kafka-RabbitMQ"
 	@echo "  kafka-rabbitmq-replicator-status # Estado del replicador Kafka-RabbitMQ"
 
@@ -137,25 +139,42 @@ deploy:
 	@kubectl create namespace mediwarehouse --dry-run=client -o yaml | kubectl apply -f - || echo "✅ Namespace mediwarehouse ya existe o fue creado"
 	@kubectl label namespace mediwarehouse istio-injection=enabled
 
-    # Logistic
+    # Medisupply - Main
+	@echo "⚡ Desplegando Kafka (cluster principal)..."
+	@helm upgrade --install kafka ./kafka \
+		--namespace medisupply \
+		--values ./config/kafka-values.yaml \
+		--wait
+
+	@echo "🖥️  Desplegando Kafka UI (ambos clusters)..."
+	@helm upgrade --install kafka-ui ./kafka-ui \
+		--namespace medisupply \
+		--wait
+	
 	@echo "📡 Desplegando MQTT (EMQX)..."
 	@helm upgrade --install emqx ./mqtt/emqx \
 		--namespace medilogistic \
 		--wait
 
-	@echo "📊 Desplegando MQTT Event Generator..."
-	@helm upgrade --install mqtt-event-generator ./microservice \
-		--namespace medilogistic \
-		--values ./config/services/mqtt-event-generator-values.yaml \
+	@echo "🔗 Desplegando MQTT-Kafka Bridge..."
+	@helm upgrade --install mqtt-kafka-bridge ./mqtt-kafka-bridge \
+		--namespace medisupply \
 		--wait
 
-	@echo "📊 Desplegando MQTT Order Event Client..."
-	@helm upgrade --install mqtt-order-event-client ./microservice \
-		--namespace medilogistic \
-		--values ./config/services/mqtt-order-event-client-values.yaml \
+	@echo "⚡ Desplegando Kafka Warehouse (cluster secundario)..."
+	@helm upgrade --install kafka-warehouse ./kafka \
+		--namespace mediwarehouse \
+		--values ./config/kafka-warehouse-values.yaml \
 		--wait
 
-    # Order
+	@echo "� Creando topics necesarios para replicación..."
+	@$(MAKE) create-kafka-topics
+
+	@echo "🔄 Desplegando Kafka-Kafka Replicator (replicación bidireccional)..."
+	@helm upgrade --install kafka-replicator ./kafka-replicator \
+		--namespace medisupply \
+		--wait --timeout 10m
+
 	@echo "🐰 Desplegando RabbitMQ..."
 	@helm upgrade --install rabbitmq ./rabbitmq \
 		--namespace mediorder \
@@ -174,7 +193,29 @@ deploy:
 		sed 's/namespace: mediorder/namespace: medisupply/' | \
 		kubectl create -f -; \
 	fi
+
+	@echo "� Cereando recursos de RabbitMQ necesarios para replicación..."
+	@$(MAKE) create-rabbitmq-resources
 	
+	@echo "🔄 Desplegando Kafka-RabbitMQ Replicator (replicación bidireccional)..."
+	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
+		--namespace medisupply \
+		--wait
+
+    # Logistic
+	@echo "📊 Desplegando MQTT Event Generator..."
+	@helm upgrade --install mqtt-event-generator ./microservice \
+		--namespace medilogistic \
+		--values ./config/services/mqtt-event-generator-values.yaml \
+		--wait
+
+	@echo "📊 Desplegando MQTT Order Event Client..."
+	@helm upgrade --install mqtt-order-event-client ./microservice \
+		--namespace medilogistic \
+		--values ./config/services/mqtt-order-event-client-values.yaml \
+		--wait
+
+    # Order
 	@echo "📦 Desplegando Order Management Service..."
 	@helm upgrade --install order-service ./microservice \
 		--namespace mediorder \
@@ -182,51 +223,20 @@ deploy:
 		--wait
 
     # Warehouse
-	@echo "⚡ Desplegando Kafka Warehouse (cluster secundario)..."
-	@helm upgrade --install kafka-warehouse ./kafka \
-		--namespace mediwarehouse \
-		--values ./config/kafka-warehouse-values.yaml \
-		--wait
-
 	@echo "📦 Desplegando Warehouse Batch..."
-	@helm upgrade --install warehouse-batch ./microservice \
+#	@helm upgrade --install warehouse-batch ./microservice \
 		--namespace mediwarehouse \
 		--values ./config/services/warehouse/batch/batch-service-values.yaml \
 		--wait
 
-    # Medisupply - Main
-	@echo "⚡ Desplegando Kafka (cluster principal)..."
-	@helm upgrade --install kafka ./kafka \
-		--namespace medisupply \
-		--values ./config/kafka-values.yaml \
-		--wait
-
-	@echo "🖥️  Desplegando Kafka UI (ambos clusters)..."
-	@helm upgrade --install kafka-ui ./kafka-ui \
-		--namespace medisupply \
-		--wait
-
-	@echo "🔗 Desplegando MQTT-Kafka Bridge..."
-	@helm upgrade --install mqtt-kafka-bridge ./mqtt-kafka-bridge \
-		--namespace medisupply \
-		--wait
-
-	@echo "🔄 Desplegando Kafka-Kafka Replicator (replicación bidireccional)..."
-	@helm upgrade --install kafka-replicator ./kafka-replicator \
-		--namespace medisupply \
-		--wait
-
-	@echo "🔄 Desplegando Kafka-RabbitMQ Replicator (replicación bidireccional)..."
-	@helm upgrade --install kafka-rabbitmq-replicator ./kafka-rabbitmq-replicator \
-		--namespace medisupply \
-		--wait
-
+    
 	@echo ""
 	@echo "🎉 ¡Despliegue completado exitosamente!"
 	@echo "📋 Servicios desplegados:"
 	@echo "  ✅ Kafka (Principal) + Kafka Warehouse + Kafka UI"
+	@echo "  ✅ Topics de Kafka creados automáticamente"
 	@echo "  ✅ EMQX (MQTT Broker)"
-	@echo "  ✅ RabbitMQ"
+	@echo "  ✅ RabbitMQ + Queues y Exchanges creados automáticamente"
 	@echo "  ✅ Order Management Service"
 	@echo "  ✅ MQTT Event Generator"
 	@echo "  ✅ MQTT Order Event Client"
@@ -244,9 +254,14 @@ deploy:
 	@echo "  📡 MQTT → Kafka:"
 	@echo "     mqtt-event-generator → EMQX → mqtt-order-event-client → EMQX → mqtt-kafka-bridge → Kafka"
 	@echo "  🔄 Replicación Bidireccional (Kafka Replicator):"
-	@echo "     Kafka ⟷ Kafka Warehouse (topics configurables por dirección)"
+	@echo "     Kafka ⟷ Kafka Warehouse"
+	@echo "     • events-order-damage → warehouse-order-damage"
+	@echo "     • events-sensor → warehouse-sensor"
+	@echo "     • order-events → order-events"
 	@echo "  🔄 Replicación Bidireccional (Kafka-RabbitMQ Replicator):"
-	@echo "     Kafka ⟷ RabbitMQ (topics/queues configurables por dirección)"
+	@echo "     Kafka ⟷ RabbitMQ"
+	@echo "     • events-order-damage → events exchange → order-damage-queue"
+	@echo "     • order-events-queue → order-events topic"
 	@echo ""
 	@echo "💡 Para acceder a los dashboards:"
 	@echo "  make kafka-ui    # Kafka UI (ambos clusters) en http://localhost:9090"
@@ -275,7 +290,7 @@ clean: ## Eliminar charts del cluster
 	@helm uninstall kafka-warehouse --namespace mediwarehouse || true
 	@echo "⚡ Eliminando Kafka..."
 	@echo "📊 Eliminando Warehouse Batch..."
-	@helm uninstall warehouse-batch --namespace mediwarehouse || true
+#	@helm uninstall warehouse-batch --namespace mediwarehouse || true
 
     # MediSupply
 	@echo "🔄 Eliminando Kafka Replicator..."
@@ -397,3 +412,164 @@ status: ## Mostrar estado de todos los componentes
 	@echo ""
 	@echo "🔍 Servicios mediwarehouse:"
 	@kubectl get svc -n mediwarehouse || echo "❌ Error obteniendo servicios"
+
+wait-for-kafka: ## Esperar a que Kafka esté disponible
+	@echo "⏳ Esperando a que Kafka Principal esté listo..."
+	@for i in $$(seq 1 30); do \
+		if kubectl exec -n medisupply kafka-controller-0 -- kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then \
+			echo "✅ Kafka Principal está listo"; \
+			break; \
+		else \
+			echo "⏳ Esperando Kafka Principal (intento $$i/30)..."; \
+			sleep 10; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "❌ Timeout esperando Kafka Principal"; \
+			exit 1; \
+		fi; \
+	done
+	
+	@echo "⏳ Esperando a que Kafka Warehouse esté listo..."
+	@for i in $$(seq 1 30); do \
+		if kubectl exec -n mediwarehouse kafka-warehouse-controller-0 -- kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then \
+			echo "✅ Kafka Warehouse está listo"; \
+			break; \
+		else \
+			echo "⏳ Esperando Kafka Warehouse (intento $$i/30)..."; \
+			sleep 10; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "❌ Timeout esperando Kafka Warehouse"; \
+			exit 1; \
+		fi; \
+	done
+
+create-topic-if-not-exists: ## Crear topic si no existe (requiere KAFKA_POD, NAMESPACE, TOPIC_NAME)
+	@echo "📋 Verificando topic $(TOPIC_NAME) en $(KAFKA_POD)..."
+	@if kubectl exec -n $(NAMESPACE) $(KAFKA_POD) -- kafka-topics.sh \
+		--bootstrap-server localhost:9092 \
+		--list | grep -q "^$(TOPIC_NAME)$$"; then \
+		echo "✅ Topic $(TOPIC_NAME) ya existe"; \
+	else \
+		echo "📝 Creando topic $(TOPIC_NAME)..."; \
+		kubectl exec -n $(NAMESPACE) $(KAFKA_POD) -- kafka-topics.sh \
+			--bootstrap-server localhost:9092 \
+			--create \
+			--topic $(TOPIC_NAME) \
+			--partitions 1 \
+			--replication-factor 1 \
+			--config retention.ms=604800000 \
+			--config cleanup.policy=delete; \
+		echo "✅ Topic $(TOPIC_NAME) creado exitosamente"; \
+	fi
+
+create-kafka-topics: wait-for-kafka ## Crear todos los topics necesarios para replicación
+	@echo "📋 Creando topics necesarios para replicación..."
+	@echo ""
+	
+	@echo "🔹 Creando topics en Kafka Principal (medisupply)..."
+	@$(MAKE) create-topic-if-not-exists KAFKA_POD=kafka-controller-0 NAMESPACE=medisupply TOPIC_NAME=events-order-damage
+	@$(MAKE) create-topic-if-not-exists KAFKA_POD=kafka-controller-0 NAMESPACE=medisupply TOPIC_NAME=events-sensor
+	@$(MAKE) create-topic-if-not-exists KAFKA_POD=kafka-controller-0 NAMESPACE=medisupply TOPIC_NAME=order-events
+	
+	@echo ""
+	@echo "🔹 Creando topics en Kafka Warehouse (mediwarehouse)..."
+	@$(MAKE) create-topic-if-not-exists KAFKA_POD=kafka-warehouse-controller-0 NAMESPACE=mediwarehouse TOPIC_NAME=warehouse-order-damage
+	@$(MAKE) create-topic-if-not-exists KAFKA_POD=kafka-warehouse-controller-0 NAMESPACE=mediwarehouse TOPIC_NAME=warehouse-order-events
+	
+	@echo ""
+	@echo "✅ Todos los topics creados exitosamente!"
+	@echo "📋 Topics creados:"
+	@echo "  🔸 Kafka Principal:"
+	@echo "    • events-order-damage"
+	@echo "    • events-sensor" 
+	@echo "    • order-events"
+	@echo "  🔸 Kafka Warehouse:"
+	@echo "    • warehouse-order-damage"
+	@echo "    • warehouse-sensor"
+	@echo "    • order-events"
+
+wait-for-rabbitmq: ## Esperar a que RabbitMQ esté disponible
+	@echo "⏳ Esperando a que RabbitMQ esté listo..."
+	@for i in $$(seq 1 30); do \
+		if kubectl exec -n mediorder rabbitmq-0 -- rabbitmqctl status >/dev/null 2>&1; then \
+			echo "✅ RabbitMQ está listo"; \
+			break; \
+		else \
+			echo "⏳ Esperando RabbitMQ (intento $$i/30)..."; \
+			sleep 10; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "❌ Timeout esperando RabbitMQ"; \
+			exit 1; \
+		fi; \
+	done
+
+create-rabbitmq-resources: wait-for-rabbitmq ## Crear exchanges, queues y bindings necesarios para replicación
+	@echo "🐰 Creando recursos de RabbitMQ necesarios para replicación..."
+	@echo ""
+	
+	@echo "🔹 Obteniendo credenciales de RabbitMQ..."
+	@RABBITMQ_PASSWORD=$$(kubectl get secret --namespace mediorder rabbitmq -o jsonpath="{.data.rabbitmq-password}" | base64 -d); \
+	echo "🔹 Creando exchange 'events'..."; \
+	kubectl exec -n mediorder rabbitmq-0 -- rabbitmqadmin \
+		--host=localhost \
+		--port=15672 \
+		--username=user \
+		--password=$$RABBITMQ_PASSWORD \
+		declare exchange \
+		name=events \
+		type=topic \
+		durable=true || echo "⚠️  Exchange 'events' ya existe o error al crear"; \
+	\
+	echo "🔹 Creando queue 'order-damage-queue'..."; \
+	kubectl exec -n mediorder rabbitmq-0 -- rabbitmqadmin \
+		--host=localhost \
+		--port=15672 \
+		--username=user \
+		--password=$$RABBITMQ_PASSWORD \
+		declare queue \
+		name=order-damage-queue \
+		durable=true || echo "⚠️  Queue 'order-damage-queue' ya existe o error al crear"; \
+	\
+	echo "🔹 Creando queue 'order-events-queue'..."; \
+	kubectl exec -n mediorder rabbitmq-0 -- rabbitmqadmin \
+		--host=localhost \
+		--port=15672 \
+		--username=user \
+		--password=$$RABBITMQ_PASSWORD \
+		declare queue \
+		name=order-events-queue \
+		durable=true || echo "⚠️  Queue 'order-events-queue' ya existe o error al crear"; \
+	\
+	echo "🔹 Creando binding 'order-damage-queue' → 'events' exchange..."; \
+	kubectl exec -n mediorder rabbitmq-0 -- rabbitmqadmin \
+		--host=localhost \
+		--port=15672 \
+		--username=user \
+		--password=$$RABBITMQ_PASSWORD \
+		declare binding \
+		source=events \
+		destination=order-damage-queue \
+		routing_key=order.damage || echo "⚠️  Binding ya existe o error al crear"; \
+	\
+	echo "🔹 Creando binding 'order-events-queue' → 'events' exchange..."; \
+	kubectl exec -n mediorder rabbitmq-0 -- rabbitmqadmin \
+		--host=localhost \
+		--port=15672 \
+		--username=user \
+		--password=$$RABBITMQ_PASSWORD \
+		declare binding \
+		source=events \
+		destination=order-events-queue \
+		routing_key=order.events || echo "⚠️  Binding ya existe o error al crear"; \
+	\
+	echo ""; \
+	echo "✅ Recursos de RabbitMQ creados exitosamente!"; \
+	echo "📋 Recursos creados:"; \
+	echo "  🔸 Exchange: events (topic)"; \
+	echo "  🔸 Queues:"; \
+	echo "    • order-damage-queue (durable)"; \
+	echo "    • order-events-queue (durable)"; \
+	echo "  🔸 Bindings:"; \
+	echo "    • order-damage-queue ← events [order.damage]"
