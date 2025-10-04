@@ -8,7 +8,7 @@ DOCKER_REGISTRY := $(or $(DOCKER_REGISTRY),)
 IMAGE_TAG := $(or $(IMAGE_TAG),latest)
 
 # Servicios disponibles
-SERVICES := mqtt-event-generator mqtt-order-event-client warehouse/batch
+SERVICES := mqtt-event-generator mqtt-order-event-client warehouse/batch order_management/order
 
 .PHONY: help build push build-all push-all build-push build-push-all list-images clean-images setup-local-registry stop-local-registry load-to-k8s load-all-to-k8s
 

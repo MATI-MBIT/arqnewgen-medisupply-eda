@@ -1,0 +1,234 @@
+replicaCount: 1
+
+image:
+  repository: order_management/order
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Configuración del servicio Kubernetes
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+# ============================================================================
+# CONFIGURACIÓN ESPECÍFICA DE LA APLICACIÓN
+# ============================================================================
+# Estas variables se convierten en variables de entorno
+app:
+  config:
+    # RabbitMQ Configuration
+    RABBITMQ_URL: "amqp://user:password@rabbitmq.mediorder.svc.cluster.local:5672/"
+    RABBITMQ_EXCHANGE: "events"
+    RABBITMQ_QUEUE: "order-damage-queue"
+    RABBITMQ_ROUTING_KEY: "order.damage"
+    
+    # HTTP Server Configuration
+    HTTP_PORT: "8080"
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  sidecar.istio.io/inject: "true"
+
+podSecurityContext: {}
+securityContext: {}
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Health checks
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# ============================================================================
+# VARIABLES DE ENTORNO ADICIONALES
+# ============================================================================
+env:
+  # Variables comunes (incluidas automáticamente)
+  common:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+  # Variables personalizadas adicionales para RabbitMQ
+  custom:
+    # RabbitMQ password from secret
+    - name: RABBITMQ_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: rabbitmq
+          key: rabbitmq-password
+    # Override RABBITMQ_URL with password from secret
+    - name: RABBITMQ_URL
+      value: "amqp://user:$(RABBITMQ_PASSWORD)@rabbitmq.mediorder.svc.cluster.local:5672/"
+
+# ============================================================================
+# CONFIGURACIÓN DE RABBITMQ
+# ============================================================================
+rabbitmq:
+  # Connection configuration
+  host: "rabbitmq.mediorder.svc.cluster.local"
+  port: 5672
+  username: "user"
+  vhost: "/"
+  
+  # Secret configuration for password
+  secretName: "rabbitmq"
+  secretKey: "rabbitmq-password"
+  
+  # Exchange and queue configuration
+  exchange:
+    name: "order-exchange"
+    type: "direct"
+    durable: true
+  
+  queue:
+    name: "order-queue"
+    durable: true
+    routingKey: "order.created"
+
+# ============================================================================
+# CARACTERÍSTICAS DESHABILITADAS PARA ESTE MICROSERVICIO
+# ============================================================================
+configMap:
+  enabled: false
+
+secret:
+  enabled: false
+
+ingress:
+  enabled: false
+
+# ============================================================================
+# CONFIGURACIÓN DE ISTIO SERVICE MESH
+# ============================================================================
+istio:
+  enabled: true
+  labels:
+    app: order-management
+    version: v1
+  
+  # Virtual Service configuration (if needed)
+  virtualService:
+    enabled: false
+    hosts: []
+    gateways: []
+  
+  # Destination Rule configuration (if needed)
+  destinationRule:
+    enabled: false
+
+# ============================================================================
+# CONFIGURACIÓN DE MONITOREO Y OBSERVABILIDAD
+# ============================================================================
+monitoring:
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    port: 9090
+    path: /metrics
+  
+  # Service monitor for Prometheus operator
+  serviceMonitor:
+    enabled: false
+    labels: {}
+    interval: 30s
+
+# ============================================================================
+# CONFIGURACIÓN DE PERSISTENCIA (SI SE NECESITA EN EL FUTURO)
+# ============================================================================
+persistence:
+  enabled: false
+  # storageClass: ""
+  # accessMode: ReadWriteOnce
+  # size: 1Gi
+
+# ============================================================================
+# CONFIGURACIÓN DE NETWORKING
+# ============================================================================
+networking:
+  # Network policies (if needed)
+  networkPolicy:
+    enabled: false
+    ingress: []
+    egress: []
+
+# ============================================================================
+# CONFIGURACIÓN DE DESARROLLO Y DEBUG
+# ============================================================================
+debug:
+  enabled: true
+  logLevel: "DEBUG"
+
+# ============================================================================
+# CONFIGURACIÓN DE BACKUP Y RECOVERY (PARA FUTURO USO)
+# ============================================================================
+backup:
+  enabled: false
+
+# ============================================================================
+# CONFIGURACIÓN DE TESTING
+# ============================================================================
+testing:
+  enabled: false
+  image:
+    repository: curlimages/curl
+    tag: latest
+  
+# ============================================================================
+# ANOTACIONES Y ETIQUETAS ADICIONALES
+# ============================================================================
+additionalLabels:
+  component: order-management
+  tier: backend
+  framework: go
+  messaging: rabbitmq
+
+additionalAnnotations:
+  description: "Order Management Service with Hexagonal Architecture"
+  version: "1.0.0"
+  maintainer: "platform-team"

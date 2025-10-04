@@ -18,6 +18,7 @@ help: ## Mostrar ayuda
 	@echo ""
 	@echo "  mqtt                   - Abrir EMQX dashboard"
 	@echo "  rabbitmq               - Abrir RabbitMQ Management UI"
+	@echo "  order-gateway          - Configurar Istio Gateway para Order Service"
 	@echo "  clean                  - Eliminar charts del cluster"
 	@echo "  destroy                - Eliminar cluster completamente"
 	@echo ""
@@ -163,6 +164,12 @@ deploy:
 	@echo "🐰 Copiar secreto de mediorder a medisupply"
 	@kubectl get secret rabbitmq -n mediorder -o yaml | sed 's/namespace: mediorder/namespace: medisupply/' | kubectl apply -f -
 
+	@echo "📦 Desplegando Order Management Service..."
+	@helm upgrade --install order-service ./microservice \
+		--namespace mediorder \
+		--values ./config/services/order_management/order/order-service-values.yaml \
+		--wait
+
     # Warehouse
 	@echo "⚡ Desplegando Kafka Warehouse (cluster secundario)..."
 	@helm upgrade --install kafka-warehouse ./kafka \
@@ -209,6 +216,7 @@ deploy:
 	@echo "  ✅ Kafka (Principal) + Kafka Warehouse + Kafka UI"
 	@echo "  ✅ EMQX (MQTT Broker)"
 	@echo "  ✅ RabbitMQ"
+	@echo "  ✅ Order Management Service"
 	@echo "  ✅ MQTT Event Generator"
 	@echo "  ✅ MQTT Order Event Client"
 	@echo "  ✅ Warehouse Batch"
@@ -247,6 +255,8 @@ clean: ## Eliminar charts del cluster
 	@helm uninstall emqx --namespace medilogistic || true
 
     # Order
+	@echo "� Eliminnando Order Management Service..."
+	@helm uninstall order-service --namespace mediorder || true
 	@echo "🐰 Eliminando RabbitMQ..."
 	@helm uninstall rabbitmq --namespace mediorder || true
 
@@ -280,6 +290,7 @@ clean: ## Eliminar charts del cluster
 	@echo "  ❌ MQTT Event Generator"
 	@echo "  ❌ MQTT Order Event Client"
 	@echo "  ❌ MQTT-Kafka Bridge"
+	@echo "  ❌ Order Management Service"
 	@echo "  ❌ RabbitMQ"
 	@echo "  ❌ EMQX (MQTT Broker)"
 	@echo "  ❌ Kafka UI"

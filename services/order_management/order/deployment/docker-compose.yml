@@ -8,3 +8,53 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  rabbitmq-init:
+    image: rabbitmq:4.2.0-beta.4-management-alpine
+    container_name: rabbitmq-init
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      # Wait for RabbitMQ to be ready
+      echo 'Waiting for RabbitMQ to be ready...'
+      sleep 10
+
+      # Create exchange and queue
+      echo 'Creating RabbitMQ exchange and queue...'
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare exchange name=order-exchange type=direct durable=true
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare queue name=order-queue durable=true
+      rabbitmqadmin -H rabbitmq -u guest -p guest declare binding source=order-exchange destination=order-queue routing_key=order.created
+
+      echo 'RabbitMQ setup completed successfully!'
+      "
+
+  order-management:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: order-management
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+    ports:
+      - "8081:8081"   # HTTP API port
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_EXCHANGE=order-exchange
+      - RABBITMQ_QUEUE=order-queue
+      - RABBITMQ_ROUTING_KEY=order.created
+      - HTTP_PORT=8081
+    # Note: Health check disabled for distroless image (no shell/wget available)
+    # Health check can be performed externally via HTTP GET to /health endpoint
+    restart: unless-stopped
