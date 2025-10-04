@@ -329,18 +329,19 @@ class KafkaRabbitMQReplicator:
         """Setup RabbitMQ exchanges and queues"""
         self.logger.info("Setting up RabbitMQ topology...")
         
-        exchanges = set()
+        exchanges = {}  # Changed to dict to store exchange type
         queues = set()
         
         for mapping in self.mappings:
             if self.direction == "K2R":
                 # Kafka to RabbitMQ mappings
                 exchange = mapping.get('rabbitmqExchange')
+                exchange_type = mapping.get('rabbitmqExchangeType', 'topic')  # Default to topic
                 queue = mapping.get('rabbitmqQueue')
                 routing_key = mapping.get('rabbitmqRoutingKey', '')
                 
                 if exchange:
-                    exchanges.add(exchange)
+                    exchanges[exchange] = exchange_type
                 if queue:
                     queues.add((queue, exchange, routing_key))
                     
@@ -350,11 +351,11 @@ class KafkaRabbitMQReplicator:
                 if queue:
                     queues.add((queue, None, ''))
         
-        # Declare exchanges
-        for exchange in exchanges:
+        # Declare exchanges with their configured types
+        for exchange, exchange_type in exchanges.items():
             try:
-                channel.exchange_declare(exchange=exchange, exchange_type='topic', durable=True)
-                self.logger.info(f"✅ Declared exchange: {exchange}")
+                channel.exchange_declare(exchange=exchange, exchange_type=exchange_type, durable=True)
+                self.logger.info(f"✅ Declared exchange: {exchange} (type: {exchange_type})")
             except Exception as e:
                 self.logger.error(f"❌ Failed to declare exchange {exchange}: {e}")
         

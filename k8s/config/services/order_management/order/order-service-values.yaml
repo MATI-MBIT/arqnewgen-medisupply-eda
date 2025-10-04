@@ -26,7 +26,7 @@ app:
     RABBITMQ_EXCHANGE: "events"
     RABBITMQ_QUEUE: "order-damage-queue"
     RABBITMQ_ROUTING_KEY: "order.damage"
-    
+
     # HTTP Server Configuration
     HTTP_PORT: "8080"
 
@@ -115,17 +115,17 @@ rabbitmq:
   port: 5672
   username: "user"
   vhost: "/"
-  
+
   # Secret configuration for password
   secretName: "rabbitmq"
   secretKey: "rabbitmq-password"
-  
+
   # Exchange and queue configuration
   exchange:
-    name: "order-exchange"
+    name: "events"
     type: "direct"
     durable: true
-  
+
   queue:
     name: "order-queue"
     durable: true
@@ -151,13 +151,13 @@ istio:
   labels:
     app: order-management
     version: v1
-  
+
   # Virtual Service configuration (if needed)
   virtualService:
     enabled: false
     hosts: []
     gateways: []
-  
+
   # Destination Rule configuration (if needed)
   destinationRule:
     enabled: false
@@ -171,7 +171,7 @@ monitoring:
     enabled: true
     port: 9090
     path: /metrics
-  
+
   # Service monitor for Prometheus operator
   serviceMonitor:
     enabled: false
@@ -218,7 +218,7 @@ testing:
   image:
     repository: curlimages/curl
     tag: latest
-  
+
 # ============================================================================
 # ANOTACIONES Y ETIQUETAS ADICIONALES
 # ============================================================================
