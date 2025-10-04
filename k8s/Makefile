@@ -474,7 +474,6 @@ create-kafka-topics: wait-for-kafka ## Crear todos los topics necesarios para re
 	
 	@echo ""
 	@echo "🔹 Creando topics en Kafka Warehouse (mediwarehouse)..."
-	@$(MAKE) create-topic-if-not-exists KAFKA_POD=kafka-warehouse-controller-0 NAMESPACE=mediwarehouse TOPIC_NAME=warehouse-order-damage
 	@$(MAKE) create-topic-if-not-exists KAFKA_POD=kafka-warehouse-controller-0 NAMESPACE=mediwarehouse TOPIC_NAME=warehouse-order-events
 	
 	@echo ""
