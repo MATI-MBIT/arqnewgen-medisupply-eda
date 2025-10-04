@@ -25,7 +25,7 @@ service:
 app:
   config:
     # Kafka configuration for order events processing
-    KAFKA_ORDER_EVENTS_TOPIC: "order-events"
+    KAFKA_ORDER_EVENTS_TOPIC: "warehouse-order-events"
     KAFKA_BROKER_ADDRESS: "kafka-warehouse:9092"
     KAFKA_GROUP_ID: "warehouse-batch-service"
     # HTTP server configuration
