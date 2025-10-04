@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +14,12 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+)
+
+var (
+	// Límites de temperatura para la generación aleatoria
+	MinTemperature = 07.0
+	MaxTemperature = 12.0
 )
 
 type Event struct {
@@ -35,6 +42,18 @@ type HealthResponse struct {
 	Service   string    `json:"service"`
 }
 
+type TemperatureLimitsRequest struct {
+	MinTemperature float64 `json:"min_temperature"`
+	MaxTemperature float64 `json:"max_temperature"`
+}
+
+type TemperatureLimitsResponse struct {
+	Message        string    `json:"message"`
+	MinTemperature float64   `json:"min_temperature"`
+	MaxTemperature float64   `json:"max_temperature"`
+	Timestamp      time.Time `json:"timestamp"`
+}
+
 func main() {
 	// Configuración MQTT
 	broker := getEnv("MQTT_BROKER", "tcp://localhost:1883")
@@ -42,10 +61,10 @@ func main() {
 	topic := getEnv("MQTT_TOPIC", "events/sensor")
 	username := getEnv("MQTT_USERNAME", "")
 	password := getEnv("MQTT_PASSWORD", "")
-	
+
 	// Configuración de frecuencia de eventos
-	eventInterval := getEventInterval("EVENT_INTERVAL_SECONDS", 30)
-	
+	eventInterval := getEventInterval("EVENT_INTERVAL_SECONDS", 10)
+
 	// Configuración del servidor HTTP
 	httpPort := getEnv("HTTP_PORT", "8080")
 
@@ -54,7 +73,7 @@ func main() {
 	opts.AddBroker(broker)
 	opts.SetClientID(clientID)
 	opts.SetCleanSession(true)
-	
+
 	if username != "" {
 		opts.SetUsername(username)
 	}
@@ -108,14 +127,14 @@ func main() {
 			publishEvent(client, topic)
 		case <-sigChan:
 			log.Println("Recibida señal de terminación, cerrando...")
-			
+
 			// Cerrar servidor HTTP
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if err := server.Shutdown(ctx); err != nil {
 				log.Printf("Error cerrando servidor HTTP: %v", err)
 			}
-			
+
 			// Desconectar cliente MQTT
 			client.Disconnect(250)
 			return
@@ -125,7 +144,7 @@ func main() {
 
 func publishEvent(client mqtt.Client, topic string) {
 	event := generateEvent()
-	
+
 	payload, err := json.Marshal(event)
 	if err != nil {
 		log.Printf("Error serializando evento: %v", err)
@@ -134,11 +153,11 @@ func publishEvent(client mqtt.Client, topic string) {
 
 	token := client.Publish(topic, 0, false, payload)
 	token.Wait()
-	
+
 	if token.Error() != nil {
 		log.Printf("Error publicando evento: %v", token.Error())
 	} else {
-		log.Printf("Evento publicado: %s", event.ID)
+		log.Printf("Evento publicado en topic %s: %s %s", topic, event.ID, event.Source)
 	}
 }
 
@@ -147,13 +166,19 @@ func generateEvent() Event {
 		ID:        fmt.Sprintf("evt_%d", time.Now().Unix()),
 		Timestamp: time.Now(),
 		Type:      "sensor_reading",
-		Source:    "temperature_sensor_01",
+		Source:    "temperature_sensor_03",
 		Data: EventData{
-			Temperature: 20.0 + (float64(time.Now().Unix()%20) - 10), // Simula temperatura entre 10-30°C
+			Temperature: GetTemperatureRandom(MinTemperature, MaxTemperature),
 			Humidity:    50.0 + (float64(time.Now().Unix()%30) - 15), // Simula humedad entre 35-65%
 			Status:      "active",
 		},
 	}
+}
+
+// GetTemperatureRandom genera una temperatura aleatoria entre los límites especificados
+func GetTemperatureRandom(lowerLimit, upperLimit float64) float64 {
+	// Generar temperatura aleatoria entre lowerLimit y upperLimit
+	return lowerLimit + rand.Float64()*(upperLimit-lowerLimit)
 }
 
 func getEnv(key, defaultValue string) string {
@@ -190,6 +215,7 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 func setupRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/temperature-limits", temperatureLimitsHandler)
 	return mux
 }
 
@@ -208,9 +234,52 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Error encoding health response: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// Handler para el endpoint de configuración de límites de temperatura
+func temperatureLimitsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req TemperatureLimitsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+
+	// Validar que los valores sean válidos
+	if req.MinTemperature >= req.MaxTemperature {
+		http.Error(w, "MinTemperature must be less than MaxTemperature", http.StatusBadRequest)
+		return
+	}
+
+	// Actualizar las variables globales
+	MinTemperature = req.MinTemperature
+	MaxTemperature = req.MaxTemperature
+
+	log.Printf("Límites de temperatura actualizados: Min=%.2f, Max=%.2f", MinTemperature, MaxTemperature)
+
+	// Responder con los nuevos valores
+	response := TemperatureLimitsResponse{
+		Message:        "Temperature limits updated successfully",
+		MinTemperature: MinTemperature,
+		MaxTemperature: MaxTemperature,
+		Timestamp:      time.Now(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding temperature limits response: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

@@ -162,8 +162,19 @@ deploy:
 		--wait
 
 	@echo "🐰 Copiar secreto de mediorder a medisupply"
-	@kubectl get secret rabbitmq -n mediorder -o yaml | sed 's/namespace: mediorder/namespace: medisupply/' | kubectl apply -f -
-
+	@if kubectl get secret rabbitmq -n medisupply >/dev/null 2>&1; then \
+		echo "🔄 Secreto rabbitmq ya existe en medisupply, eliminando y recreando..."; \
+		kubectl delete secret rabbitmq -n medisupply; \
+		kubectl get secret rabbitmq -n mediorder -o yaml | \
+		sed 's/namespace: mediorder/namespace: medisupply/' | \
+		kubectl create -f -; \
+	else \
+		echo "📋 Creando secreto rabbitmq en medisupply..."; \
+		kubectl get secret rabbitmq -n mediorder -o yaml | \
+		sed 's/namespace: mediorder/namespace: medisupply/' | \
+		kubectl create -f -; \
+	fi
+	
 	@echo "📦 Desplegando Order Management Service..."
 	@helm upgrade --install order-service ./microservice \
 		--namespace mediorder \

@@ -18,6 +18,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var minTemperature float64 = 10.0
+
 // Event represents the structure of events received from mqtt-event-generator
 type Event struct {
 	ID        string    `json:"id"`
@@ -102,13 +104,12 @@ func main() {
 	// MQTT Configuration
 	broker := getEnv("MQTT_BROKER", "tcp://localhost:1883")
 	clientID := getEnv("MQTT_CLIENT_ID", "order-event-client")
-	topic := getEnv("MQTT_TOPIC", "events/order-damage")
+	topic := getEnv("MQTT_TOPIC", "events/sensor")
 	username := getEnv("MQTT_USERNAME", "")
 	password := getEnv("MQTT_PASSWORD", "")
 
 	// HTTP Server Configuration
 	httpPort := getEnv("HTTP_PORT", "8080")
-
 	// Configure MQTT client options
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(broker)
@@ -295,9 +296,9 @@ var messageHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Messa
 
 	log.Printf("Event stored: ID=%s, Type=%s, Source=%s, Temp=%.2f°C, Humidity=%.2f%%",
 		event.ID, event.Type, event.Source, event.Data.Temperature, event.Data.Humidity)
-	log.Printf("Publishing order damage event for sensor/order id=%s", event.ID)
 	// Publish order damage event to Kafka after logging and storing
-	if orderPublisher != nil {
+	if event.Data.Temperature < minTemperature {
+		log.Printf("Publishing order damage event for sensor/order id=%s", event.ID)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := orderPublisher.PublishOrderDamageFromSensor(
@@ -313,8 +314,6 @@ var messageHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Messa
 		} else {
 			log.Printf("Order damage event published for sensor/order id=%s", event.ID)
 		}
-	} else {
-		log.Printf("Order publisher not initialized, skipping order damage event")
 	}
 }
 

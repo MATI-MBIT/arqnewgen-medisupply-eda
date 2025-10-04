@@ -10,6 +10,27 @@ listeners:
   interbroker:
     protocol: PLAINTEXT
 
+# La parte más importante: Lo que Kafka anuncia a los clientes
+advertisedListeners:
+  # Anuncia el DNS interno de K8s para los clientes que se conectan al puerto 9092
+  - name: internal
+    # IMPORTANTE: Reemplaza esto con el nombre de tu release y namespace
+    # Formato: <nombre-release>-kafka-<id-broker>.<nombre-release>-kafka-headless.<namespace>.svc.cluster.local:9092
+    # Bitnami lo genera automáticamente si usas esta plantilla:
+    domain: "{{ .Release.Name }}-kafka-headless.{{ .Release.Namespace }}.svc.cluster.local"
+    port: 9092
+    protocol: PLAINTEXT
+
+# Mapeo de protocolos
+protocolMap: "internal:PLAINTEXT,controller:PLAINTEXT"
+  
+# Qué listener deben usar los brokers para hablar entre ellos
+interBrokerListener: "internal"
+
+overrideConfiguration:
+  offsets.topic.replication.factor: 1
+  transaction.state.log.replication.factor: 1
+
 auth:
   clientProtocol: plaintext
   interBrokerProtocol: plaintext
