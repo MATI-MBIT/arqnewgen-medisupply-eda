@@ -59,7 +59,7 @@ mqtt:
 app:
   config:
     # Intervalo en segundos para generar eventos
-    EVENT_INTERVAL_SECONDS: "30"
+    EVENT_INTERVAL_SECONDS: "1"
 
 # ============================================================================
 # CONFIGURACIÓN DE KUBERNETES

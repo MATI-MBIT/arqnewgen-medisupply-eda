@@ -110,11 +110,9 @@ class KafkaRabbitMQReplicator:
         self.rabbitmq_password = os.getenv('RABBITMQ_PASSWORD', 'password')
         self.rabbitmq_vhost = os.getenv('RABBITMQ_VHOST', '/')
         
-        # Consumer group (only needed for R2K direction)
-        if self.direction == "R2K":
-            self.consumer_group = os.getenv('CONSUMER_GROUP', 'kafka-rabbitmq-replicator-r2k')
-        else:
-            self.consumer_group = None  # K2R uses manual assignment
+        # Consumer group (needed for both directions now)
+        self.consumer_group_id = os.getenv('CONSUMER_GROUP_ID')
+        self.auto_offset_reset = os.getenv('AUTO_OFFSET_RESET', 'earliest')
         
         # Load mappings
         mappings_str = os.getenv('REPLICATION_MAPPINGS', '[]')
@@ -122,10 +120,8 @@ class KafkaRabbitMQReplicator:
         self.logger.info(f"KAFKA_BOOTSTRAP_SERVERS: {self.kafka_servers}")
         self.logger.info(f"RABBITMQ_HOST: {self.rabbitmq_host}:{self.rabbitmq_port}")
         self.logger.info(f"RABBITMQ_VHOST: {self.rabbitmq_vhost}")
-        if self.consumer_group:
-            self.logger.info(f"CONSUMER_GROUP: {self.consumer_group}")
-        else:
-            self.logger.info("CONSUMER_GROUP: None (using manual assignment)")
+        self.logger.info(f"CONSUMER_GROUP_ID: {self.consumer_group_id}")
+        self.logger.info(f"AUTO_OFFSET_RESET: {self.auto_offset_reset}")
         self.logger.info(f"REPLICATION_MAPPINGS: {mappings_str}")
         
         # Parse mappings
@@ -146,11 +142,11 @@ class KafkaRabbitMQReplicator:
             self.logger.info(f"Mapping {i+1}: {mapping}")
             
     def create_kafka_consumer(self):
-        """Create Kafka consumer for K2R direction without consumer group"""
+        """Create Kafka consumer for K2R direction with consumer group"""
         if self.direction != "K2R":
             return None
             
-        self.logger.info("Creating Kafka consumer...")
+        self.logger.info("Creating Kafka consumer with consumer group...")
         
         # Extract Kafka topics from mappings
         kafka_topics = [mapping['kafkaTopic'] for mapping in self.mappings]
@@ -161,56 +157,48 @@ class KafkaRabbitMQReplicator:
         for attempt in range(max_retries):
             try:
                 self.logger.info(f"Kafka consumer creation attempt {attempt + 1}/{max_retries}")
+                self.logger.info(f"Using consumer group: {self.consumer_group_id}")
                 
-                # Create consumer WITHOUT consumer group
+                # Create consumer WITH consumer group
                 consumer = KafkaConsumer(
+                    *kafka_topics,  # Subscribe to topics
                     bootstrap_servers=self.kafka_servers,
-                    # NO group_id - this is key!
+                    
+                    # Consumer group configuration
+                    group_id=self.consumer_group_id,
                     
                     # Deserialization
                     value_deserializer=lambda m: m if m is None else m,
                     key_deserializer=lambda m: m if m is None else m,
                     
-                    # Offset management
-                    auto_offset_reset='latest',
-                    enable_auto_commit=False,  # No auto commit without group
-                    
-                    # Timeouts
+                    # Offset configuration to avoid lag
+                    auto_offset_reset=self.auto_offset_reset,  # Configurable offset reset
+                    enable_auto_commit=True,
+                    auto_commit_interval_ms=1000,  # Commit more frequently
                     consumer_timeout_ms=None,
-                    session_timeout_ms=30000,
-                    heartbeat_interval_ms=3000,
-                    request_timeout_ms=40000,
                     
-                    # Fetching
-                    max_poll_records=100,
-                    max_poll_interval_ms=300000,
-                    fetch_min_bytes=1,
-                    fetch_max_wait_ms=1000,
+                    # Improve polling behavior
+                    max_poll_records=100,  # Smaller batches for better responsiveness
+                    fetch_min_bytes=1,     # Don't wait for large batches
+                    fetch_max_wait_ms=500, # Shorter wait time
                 )
                 
                 self.logger.info("✅ Kafka consumer created successfully")
                 
-                # Manual assignment - simple approach like your original
-                self.logger.info("Using manual partition assignment...")
+                # Wait for partition assignment
+                self.logger.info("Waiting for partition assignment...")
+                assignment_timeout = 30  # seconds
+                start_time = time.time()
                 
-                partitions = []
-                for topic in kafka_topics:
-                    # Simple approach: assign partition 0 for each topic
-                    tp = TopicPartition(topic, 0)
-                    partitions.append(tp)
-                    self.logger.info(f"Will assign: {tp}")
+                while not consumer.assignment() and (time.time() - start_time) < assignment_timeout:
+                    consumer.poll(timeout_ms=1000)
+                    time.sleep(0.5)
                 
-                # Direct assignment
-                consumer.assign(partitions)
                 assignment = consumer.assignment()
-                self.logger.info(f"✅ Manual assignment successful: {assignment}")
-                
-                # Seek to beginning to process all available messages
-                self.logger.info("Seeking to beginning to process all messages...")
-                consumer.seek_to_beginning()
-                
-                # Consumer setup complete
-                self.logger.info("Consumer setup complete, starting main loop...")
+                if assignment:
+                    self.logger.info(f"✅ Consumer group assignment successful: {assignment}")
+                else:
+                    self.logger.warning("No partitions assigned yet, will continue and wait for assignment")
                 
                 return consumer
                 
@@ -249,15 +237,15 @@ class KafkaRabbitMQReplicator:
                     acks='all',
                     retries=5,
                     retry_backoff_ms=1000,
-                    max_in_flight_requests_per_connection=1,
+                    max_in_flight_requests_per_connection=5,  # Allow more concurrent requests for better throughput
                     
                     # Timeouts
                     request_timeout_ms=30000,
                     delivery_timeout_ms=120000,
                     
-                    # Batching
-                    batch_size=16384,
-                    linger_ms=5,
+                    # Batching - optimized for low latency
+                    batch_size=1024,   # Smaller batches for faster sending
+                    linger_ms=0,       # Send immediately, don't wait
                     
                     # Buffer
                     buffer_memory=33554432,
@@ -265,8 +253,8 @@ class KafkaRabbitMQReplicator:
                     # Compression
                     compression_type='gzip',
                     
-                    # Idempotence
-                    enable_idempotence=True,
+                    # Disable idempotence for better throughput (max_in_flight > 1)
+                    enable_idempotence=False,
                 )
                 
                 self.logger.info("✅ Kafka producer created successfully")
@@ -558,6 +546,9 @@ class KafkaRabbitMQReplicator:
             # Wait for completion
             record_metadata = future.get(timeout=30)
             
+            # Flush immediately to ensure no lag
+            self.kafka_producer.flush(timeout=1)
+            
             # Acknowledge RabbitMQ message
             channel.basic_ack(delivery_tag=method.delivery_tag)
             
@@ -613,6 +604,7 @@ class KafkaRabbitMQReplicator:
             sys.exit(1)
         
         self.logger.info("=== K2R REPLICATION STARTED ===")
+        self.logger.info(f"Consumer group: {self.consumer_group_id}")
         self.logger.info("Listening for Kafka messages...")
         
         consecutive_empty_polls = 0
@@ -631,7 +623,7 @@ class KafkaRabbitMQReplicator:
                     if consecutive_empty_polls % 10 == 0:
                         self.logger.info(f"🔍 Polling for Kafka messages... (poll #{consecutive_empty_polls + 1})")
                     
-                    message_batch = self.kafka_consumer.poll(timeout_ms=5000)
+                    message_batch = self.kafka_consumer.poll(timeout_ms=1000)  # Shorter timeout for better responsiveness
                     
                     if message_batch:
                         consecutive_empty_polls = 0
@@ -663,7 +655,7 @@ class KafkaRabbitMQReplicator:
                     self.error_count += 1
                     time.sleep(1)
                     
-                time.sleep(0.01)
+                # No pause for better responsiveness - polling timeout handles this
                 
         except KeyboardInterrupt:
             self.logger.info("Shutdown requested via KeyboardInterrupt")

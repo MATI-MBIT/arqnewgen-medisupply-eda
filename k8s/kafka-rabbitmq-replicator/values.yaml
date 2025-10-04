@@ -1,4 +1,4 @@
-replicaCount: 1 # CRITICAL: Must be 1 to avoid duplicate processing
+replicaCount: 2 # Can now scale with consumer groups
 
 image:
   repository: python
@@ -20,10 +20,15 @@ rabbitmq:
   secretKey: "rabbitmq-password"
   vhost: "/"
 
-# Consumer groups (only needed for R2K, K2R uses manual assignment)
+# Consumer groups
 consumerGroup:
-  # kafkaToRabbitmq: not needed (uses manual assignment)
-  rabbitmqToKafka: "kafka-rabbitmq-replicator-r2k"
+  kafkaToRabbitmq: "kafka-rabbitmq-replicator-k2r-v2"
+  rabbitmqToKafka: "kafka-rabbitmq-replicator-r2k-v2"
+
+# Consumer configuration for low latency
+consumer:
+  # Process all available messages (earliest) or only new ones (latest)
+  autoOffsetReset: "earliest"  # Change to "latest" if you only want new messages
 
 # Replication configuration
 replication:

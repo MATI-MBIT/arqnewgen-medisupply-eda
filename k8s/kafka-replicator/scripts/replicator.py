@@ -58,12 +58,18 @@ class KafkaReplicator:
         target_servers_str = os.getenv('TARGET_BOOTSTRAP_SERVERS')
         topic_mapping_str = os.getenv('TOPIC_MAPPING', '{}')
         
+        # Consumer group configuration
+        self.consumer_group_id = os.getenv('CONSUMER_GROUP_ID')
+        self.auto_offset_reset = os.getenv('AUTO_OFFSET_RESET', 'earliest')
+        
         self.logger.info(f"SOURCE_BOOTSTRAP_SERVERS: {source_servers_str}")
         self.logger.info(f"TARGET_BOOTSTRAP_SERVERS: {target_servers_str}")
         self.logger.info(f"TOPIC_MAPPING: {topic_mapping_str}")
+        self.logger.info(f"CONSUMER_GROUP_ID: {self.consumer_group_id}")
+        self.logger.info(f"AUTO_OFFSET_RESET: {self.auto_offset_reset}")
         
         # Validate required variables
-        if not source_servers_str or not target_servers_str:
+        if not source_servers_str or not target_servers_str or not self.consumer_group_id:
             self.logger.error("Missing required environment variables")
             sys.exit(1)
             
@@ -90,8 +96,8 @@ class KafkaReplicator:
         self.logger.info(f"Topic mapping: {self.topic_mapping}")
         
     def create_consumer(self):
-        """Create consumer without consumer group (manual assignment)"""
-        self.logger.info("Creating Kafka consumer...")
+        """Create consumer with proper consumer group configuration"""
+        self.logger.info("Creating Kafka consumer with consumer group...")
         
         max_retries = 5
         retry_delay = 5
@@ -99,64 +105,56 @@ class KafkaReplicator:
         for attempt in range(max_retries):
             try:
                 self.logger.info(f"Consumer creation attempt {attempt + 1}/{max_retries}")
+                self.logger.info(f"Using consumer group: {self.consumer_group_id}")
                 
-                # Create consumer WITHOUT consumer group
+                # Create consumer WITH consumer group
                 consumer = KafkaConsumer(
+                    *self.source_topics,  # Subscribe to topics
                     bootstrap_servers=self.source_servers,
-                    # NO group_id - this is key!
+                    
+                    # Consumer group configuration
+                    group_id=self.consumer_group_id,
                     
                     # Deserialization - handle bytes properly
                     value_deserializer=lambda m: m if m is None else m,
                     key_deserializer=lambda m: m if m is None else m,
                     
-                    # Offset management
-                    auto_offset_reset='latest',  # Only new messages by default
-                    enable_auto_commit=False,  # No auto commit without group
+                    # Offset configuration to avoid lag
+                    auto_offset_reset=self.auto_offset_reset,  # Configurable offset reset
+                    enable_auto_commit=True,
+                    auto_commit_interval_ms=1000,  # Commit more frequently
+                    consumer_timeout_ms=None,
                     
-                    # Timeouts
-                    consumer_timeout_ms=None,  # No timeout for polling
-                    session_timeout_ms=30000,
-                    heartbeat_interval_ms=3000,
-                    request_timeout_ms=40000,
-                    
-                    # Fetching
-                    max_poll_records=500,
-                    max_poll_interval_ms=300000,
-                    fetch_min_bytes=1,
-                    fetch_max_wait_ms=1000,
-                    
-                    # Metadata
-                    metadata_max_age_ms=30000,
-                    
-                    # Connection
-                    connections_max_idle_ms=540000,
-                    api_version_auto_timeout_ms=60000,
+                    # Improve polling behavior
+                    max_poll_records=100,  # Smaller batches for better responsiveness
+                    fetch_min_bytes=1,     # Don't wait for large batches
+                    fetch_max_wait_ms=500, # Shorter wait time
                 )
                 
                 self.logger.info("✅ Consumer created successfully")
                 
-                # Manual assignment - simple approach like your original
-                self.logger.info("Using manual partition assignment...")
+                # Wait for partition assignment
+                self.logger.info("Waiting for partition assignment...")
+                assignment_timeout = 30  # seconds
+                start_time = time.time()
                 
-                partitions = []
-                for topic in self.source_topics:
-                    # Simple approach: assign partition 0 for each topic
-                    # This can be enhanced later to discover all partitions
-                    tp = TopicPartition(topic, 0)
-                    partitions.append(tp)
-                    self.logger.info(f"Will assign: {tp}")
+                while not consumer.assignment() and (time.time() - start_time) < assignment_timeout:
+                    consumer.poll(timeout_ms=1000)
+                    time.sleep(0.5)
                 
-                # Direct assignment
-                consumer.assign(partitions)
                 assignment = consumer.assignment()
-                self.logger.info(f"✅ Manual assignment successful: {assignment}")
-                
-                # Seek to beginning to process all available messages
-                self.logger.info("Seeking to beginning to process all messages...")
-                consumer.seek_to_beginning()
-                
-                # Skip detailed position checking for now - it might be hanging
-                self.logger.info("Consumer setup complete, starting main loop...")
+                if assignment:
+                    self.logger.info(f"✅ Consumer group assignment successful: {assignment}")
+                    
+                    # Log partition details
+                    for tp in assignment:
+                        try:
+                            position = consumer.position(tp)
+                            self.logger.info(f"Assigned partition {tp} at position {position}")
+                        except Exception as e:
+                            self.logger.warning(f"Could not get position for {tp}: {e}")
+                else:
+                    self.logger.warning("No partitions assigned yet, will continue and wait for assignment")
                 
                 return consumer
                 
@@ -233,15 +231,15 @@ class KafkaReplicator:
                     acks='all',
                     retries=5,
                     retry_backoff_ms=1000,
-                    max_in_flight_requests_per_connection=1,  # Ensure ordering
+                    max_in_flight_requests_per_connection=5,  # Allow more concurrent requests for better throughput
                     
                     # Timeouts
                     request_timeout_ms=30000,
                     delivery_timeout_ms=120000,
                     
-                    # Batching
-                    batch_size=16384,
-                    linger_ms=5,
+                    # Batching - optimized for low latency
+                    batch_size=1024,   # Smaller batches for faster sending
+                    linger_ms=0,       # Send immediately, don't wait
                     
                     # Buffer
                     buffer_memory=33554432,
@@ -249,8 +247,8 @@ class KafkaReplicator:
                     # Compression
                     compression_type='gzip',
                     
-                    # Idempotence for exactly-once semantics
-                    enable_idempotence=True,
+                    # Disable idempotence for better throughput (max_in_flight > 1)
+                    enable_idempotence=False,
                 )
                 
                 self.logger.info("✅ Producer created successfully")
@@ -266,8 +264,8 @@ class KafkaReplicator:
                     
         return None
         
-    def process_message(self, message, producer):
-        """Process a single message with proper error handling"""
+    def process_message(self, message, producer, consumer):
+        """Process a single message with proper error handling and offset management"""
         try:
             source_topic = message.topic
             target_topic = self.topic_mapping.get(source_topic, source_topic)
@@ -324,10 +322,15 @@ class KafkaReplicator:
             # Wait for completion
             record_metadata = future.get(timeout=30)
             
+            # Flush immediately to ensure no lag
+            producer.flush(timeout=1)
+            
             # Track processed message
             source_tp = TopicPartition(source_topic, message.partition)
             self.processed_offsets[source_tp] = message.offset
             self.processed_messages.add(message_id)
+            
+            # Auto-commit is enabled by default, no manual commit needed
             
             # Limit memory usage - keep only last 10000 message IDs
             if len(self.processed_messages) > 10000:
@@ -408,7 +411,7 @@ class KafkaReplicator:
             self.logger.info("=== REPLICATION STARTED ===")
             self.logger.info(f"Source topics: {self.source_topics}")
             self.logger.info(f"Topic mapping: {self.topic_mapping}")
-            self.logger.info("Using manual assignment (no consumer group)")
+            self.logger.info(f"Consumer group: {self.consumer_group_id}")
             self.logger.info("Listening for messages...")
             
             consecutive_empty_polls = 0
@@ -427,7 +430,7 @@ class KafkaReplicator:
                     if consecutive_empty_polls % 10 == 0:  # Log every 10 polls
                         self.logger.info(f"🔍 Polling for messages... (poll #{consecutive_empty_polls + 1})")
                     
-                    message_batch = self.consumer.poll(timeout_ms=5000)
+                    message_batch = self.consumer.poll(timeout_ms=1000)  # Shorter timeout for better responsiveness
                     
                     if message_batch:
                         consecutive_empty_polls = 0
@@ -442,12 +445,12 @@ class KafkaReplicator:
                                 if self.shutdown_requested:
                                     break
                                     
-                                success = self.process_message(message, self.producer)
+                                success = self.process_message(message, self.producer, self.consumer)
                                 if success:
                                     batch_count += 1
                         
-                        # Flush producer to ensure delivery
-                        self.producer.flush(timeout=10)
+                        # Flush producer immediately to ensure delivery
+                        self.producer.flush(timeout=5)
                         
                         if batch_count > 0:
                             self.logger.info(f"✅ Processed batch of {batch_count} messages")
@@ -479,8 +482,7 @@ class KafkaReplicator:
                     self.error_count += 1
                     time.sleep(1)  # Brief pause on error
                     
-                # Brief pause to prevent busy waiting
-                time.sleep(0.01)
+                # No pause for better responsiveness - polling timeout handles this
                 
         except KeyboardInterrupt:
             self.logger.info("Shutdown requested via KeyboardInterrupt")

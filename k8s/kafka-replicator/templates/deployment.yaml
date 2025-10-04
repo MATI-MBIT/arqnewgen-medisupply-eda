@@ -79,8 +79,10 @@ spec:
           value: "{{ .Values.sourceKafka.bootstrapServers }}"
         - name: TARGET_BOOTSTRAP_SERVERS
           value: "{{ .Values.targetKafka.bootstrapServers }}"
-        - name: CONSUMER_GROUP
+        - name: CONSUMER_GROUP_ID
           value: "{{ .Values.consumerGroup.sourceToTarget }}"
+        - name: AUTO_OFFSET_RESET
+          value: "{{ .Values.consumer.autoOffsetReset }}"
         - name: TOPIC_MAPPING
           value: |
             {
@@ -151,8 +153,10 @@ spec:
           value: "{{ .Values.targetKafka.bootstrapServers }}"
         - name: TARGET_BOOTSTRAP_SERVERS
           value: "{{ .Values.sourceKafka.bootstrapServers }}"
-        - name: CONSUMER_GROUP
+        - name: CONSUMER_GROUP_ID
           value: "{{ .Values.consumerGroup.targetToSource }}"
+        - name: AUTO_OFFSET_RESET
+          value: "{{ .Values.consumer.autoOffsetReset }}"
         - name: TOPIC_MAPPING
           value: |
             {

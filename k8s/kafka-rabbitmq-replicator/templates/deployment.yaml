@@ -46,7 +46,10 @@ spec:
               key: {{ .Values.rabbitmq.secretKey | default "rabbitmq-password" }}
         - name: RABBITMQ_VHOST
           value: {{ .Values.rabbitmq.vhost | quote }}
-        # Consumer group not needed for K2R (manual assignment)
+        - name: CONSUMER_GROUP_ID
+          value: {{ .Values.consumerGroup.kafkaToRabbitmq | quote }}
+        - name: AUTO_OFFSET_RESET
+          value: {{ .Values.consumer.autoOffsetReset | quote }}
         - name: REPLICATION_MAPPINGS
           value: {{ .Values.replication.kafkaToRabbitmq.mappings | toJson | quote }}
         ports:
@@ -139,8 +142,10 @@ spec:
               key: {{ .Values.rabbitmq.secretKey | default "rabbitmq-password" }}
         - name: RABBITMQ_VHOST
           value: {{ .Values.rabbitmq.vhost | quote }}
-        - name: CONSUMER_GROUP
+        - name: CONSUMER_GROUP_ID
           value: {{ .Values.consumerGroup.rabbitmqToKafka | quote }}
+        - name: AUTO_OFFSET_RESET
+          value: {{ .Values.consumer.autoOffsetReset | quote }}
         - name: REPLICATION_MAPPINGS
           value: {{ .Values.replication.rabbitmqToKafka.mappings | toJson | quote }}
         ports:
