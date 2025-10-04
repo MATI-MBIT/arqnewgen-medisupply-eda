@@ -329,18 +329,19 @@ class KafkaRabbitMQReplicator:
         """Setup RabbitMQ exchanges and queues"""
         self.logger.info("Setting up RabbitMQ topology...")
         
-        exchanges = set()
+        exchanges = {}  # Changed to dict to store exchange type
         queues = set()
         
         for mapping in self.mappings:
             if self.direction == "K2R":
                 # Kafka to RabbitMQ mappings
                 exchange = mapping.get('rabbitmqExchange')
+                exchange_type = mapping.get('rabbitmqExchangeType', 'topic')  # Default to topic
                 queue = mapping.get('rabbitmqQueue')
                 routing_key = mapping.get('rabbitmqRoutingKey', '')
                 
                 if exchange:
-                    exchanges.add(exchange)
+                    exchanges[exchange] = exchange_type
                 if queue:
                     queues.add((queue, exchange, routing_key))
                     
@@ -350,11 +351,11 @@ class KafkaRabbitMQReplicator:
                 if queue:
                     queues.add((queue, None, ''))
         
-        # Declare exchanges
-        for exchange in exchanges:
+        # Declare exchanges with their configured types
+        for exchange, exchange_type in exchanges.items():
             try:
-                channel.exchange_declare(exchange=exchange, exchange_type='topic', durable=True)
-                self.logger.info(f"✅ Declared exchange: {exchange}")
+                channel.exchange_declare(exchange=exchange, exchange_type=exchange_type, durable=True)
+                self.logger.info(f"✅ Declared exchange: {exchange} (type: {exchange_type})")
             except Exception as e:
                 self.logger.error(f"❌ Failed to declare exchange {exchange}: {e}")
         
@@ -488,10 +489,22 @@ class KafkaRabbitMQReplicator:
         """Process message from RabbitMQ to Kafka"""
         try:
             # Find mapping for this queue
-            queue_name = method.routing_key if method.exchange == '' else None
+            # The queue name should be available from the consumer setup
+            # We need to track which consumer_tag corresponds to which queue
+            queue_name = None
+            
+            # Try to get queue name from consumer tag mapping
+            consumer_tag = getattr(method, 'consumer_tag', None)
+            if hasattr(self, 'consumer_tag_to_queue') and consumer_tag in self.consumer_tag_to_queue:
+                queue_name = self.consumer_tag_to_queue[consumer_tag]
+            
+            # Fallback: try routing key for default exchange
+            if not queue_name and method.exchange == '':
+                queue_name = method.routing_key
+            
+            # Last resort: use consumer tag (this will cause the warning)
             if not queue_name:
-                # Try to get queue name from method
-                queue_name = getattr(method, 'consumer_tag', 'unknown')
+                queue_name = consumer_tag or 'unknown'
             
             mapping = None
             for m in self.mappings:
@@ -686,16 +699,22 @@ class KafkaRabbitMQReplicator:
         
         self.logger.info("=== R2K REPLICATION STARTED ===")
         
+        # Initialize consumer tag to queue mapping
+        self.consumer_tag_to_queue = {}
+        
         # Setup consumers for each queue
         for mapping in self.mappings:
             queue = mapping.get('rabbitmqQueue')
             if queue:
                 self.logger.info(f"Setting up consumer for queue: {queue}")
-                self.rabbitmq_channel.basic_consume(
+                consumer_tag = self.rabbitmq_channel.basic_consume(
                     queue=queue,
                     on_message_callback=self.process_rabbitmq_message,
                     auto_ack=False
                 )
+                # Track the consumer tag to queue mapping
+                self.consumer_tag_to_queue[consumer_tag] = queue
+                self.logger.info(f"✅ Consumer setup complete: {consumer_tag} -> {queue}")
         
         self.logger.info("Listening for RabbitMQ messages...")
         

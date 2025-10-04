@@ -1,0 +1,5 @@
+{
+  "mqtt_topic": "events/order-damage",
+  "payload": "{\"eventId\":\"evt_1759555253\",\"type\":\"order.damage\",\"source\":\"mqtt-order-event-client\",\"occurredAt\":\"2025-10-04T05:20:53.182048461Z\",\"orderId\":\"evt_1759555253\",\"severity\":\"minor\",\"description\":\"Potential damage detected: temp=9.23C, humidity=58.00%\",\"details\":{\"temperature\":9.234309268737501,\"humidity\":58,\"status\":\"active\",\"mqttTopic\":\"events/sensor\"}}",
+  "timestamp": 1759555253.2585864
+}

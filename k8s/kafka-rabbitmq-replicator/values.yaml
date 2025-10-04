@@ -19,6 +19,8 @@ rabbitmq:
   secretName: "rabbitmq"
   secretKey: "rabbitmq-password"
   vhost: "/"
+  # Full connection URL (will be constructed with password from secret)
+  url: "amqp://user:$(RABBITMQ_PASSWORD)@rabbitmq.mediorder.svc.cluster.local:5672/"
 
 # Consumer groups (only needed for R2K, K2R uses manual assignment)
 consumerGroup:
@@ -33,17 +35,14 @@ replication:
       - kafkaTopic: "events-order-damage"
         rabbitmqQueue: "order-damage-queue"
         rabbitmqExchange: "events"
+        rabbitmqExchangeType: "direct"
         rabbitmqRoutingKey: "order.damage"
-      - kafkaTopic: "events-sensor"
-        rabbitmqQueue: "sensor-queue"
-        rabbitmqExchange: "events"
-        rabbitmqRoutingKey: "sensor.data"
 
   rabbitmqToKafka:
-    enabled: false
-    mappings: []
-    #  - rabbitmqQueue: "warehouse-events"
-    #    kafkaTopic: "warehouse-events"
+    enabled: true
+    mappings:
+     - rabbitmqQueue: "order-events-queue"
+       kafkaTopic: "order-events"
     #  - rabbitmqQueue: "notifications"
     #    kafkaTopic: "notifications"
 

@@ -18,6 +18,7 @@ help: ## Mostrar ayuda
 	@echo ""
 	@echo "  mqtt                   - Abrir EMQX dashboard"
 	@echo "  rabbitmq               - Abrir RabbitMQ Management UI"
+	@echo "  order-gateway          - Configurar Istio Gateway para Order Service"
 	@echo "  clean                  - Eliminar charts del cluster"
 	@echo "  destroy                - Eliminar cluster completamente"
 	@echo ""
@@ -174,11 +175,23 @@ deploy:
 		kubectl create -f -; \
 	fi
 	
+	@echo "📦 Desplegando Order Management Service..."
+	@helm upgrade --install order-service ./microservice \
+		--namespace mediorder \
+		--values ./config/services/order_management/order/order-service-values.yaml \
+		--wait
+
     # Warehouse
 	@echo "⚡ Desplegando Kafka Warehouse (cluster secundario)..."
 	@helm upgrade --install kafka-warehouse ./kafka \
 		--namespace mediwarehouse \
 		--values ./config/kafka-warehouse-values.yaml \
+		--wait
+
+	@echo "📦 Desplegando Warehouse Batch..."
+	@helm upgrade --install warehouse-batch ./microservice \
+		--namespace mediwarehouse \
+		--values ./config/services/warehouse/batch/batch-service-values.yaml \
 		--wait
 
     # Medisupply - Main
@@ -214,8 +227,10 @@ deploy:
 	@echo "  ✅ Kafka (Principal) + Kafka Warehouse + Kafka UI"
 	@echo "  ✅ EMQX (MQTT Broker)"
 	@echo "  ✅ RabbitMQ"
+	@echo "  ✅ Order Management Service"
 	@echo "  ✅ MQTT Event Generator"
 	@echo "  ✅ MQTT Order Event Client"
+	@echo "  ✅ Warehouse Batch"
 	@echo "  ✅ MQTT-Kafka Bridge"
 	@echo "  ✅ Kafka Replicator (Replicación Bidireccional)"
 	@echo "  ✅ Kafka-RabbitMQ Replicator (Replicación Bidireccional)"
@@ -251,12 +266,16 @@ clean: ## Eliminar charts del cluster
 	@helm uninstall emqx --namespace medilogistic || true
 
     # Order
+	@echo "� Eliminnando Order Management Service..."
+	@helm uninstall order-service --namespace mediorder || true
 	@echo "🐰 Eliminando RabbitMQ..."
 	@helm uninstall rabbitmq --namespace mediorder || true
 
     # Warehouse
 	@helm uninstall kafka-warehouse --namespace mediwarehouse || true
 	@echo "⚡ Eliminando Kafka..."
+	@echo "📊 Eliminando Warehouse Batch..."
+	@helm uninstall warehouse-batch --namespace mediwarehouse || true
 
     # MediSupply
 	@echo "🔄 Eliminando Kafka Replicator..."
@@ -278,9 +297,11 @@ clean: ## Eliminar charts del cluster
 	@echo ""
 	@echo "✅ Todos los charts eliminados del cluster!"
 	@echo "📋 Servicios eliminados:"
+	@echo "  ❌ Warehouse Batch"
 	@echo "  ❌ MQTT Event Generator"
 	@echo "  ❌ MQTT Order Event Client"
 	@echo "  ❌ MQTT-Kafka Bridge"
+	@echo "  ❌ Order Management Service"
 	@echo "  ❌ RabbitMQ"
 	@echo "  ❌ EMQX (MQTT Broker)"
 	@echo "  ❌ Kafka UI"

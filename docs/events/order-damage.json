@@ -1,0 +1,15 @@
+{
+  "eventId": "evt_1759551318",
+  "type": "order.damage",
+  "source": "mqtt-order-event-client",
+  "occurredAt": "2025-10-04T04:15:18.964668869Z",
+  "orderId": "evt_1759551318",
+  "severity": "minor",
+  "description": "Potential damage detected: temp=7.28C, humidity=53.00%",
+  "details": {
+    "temperature": 7.283055259756533,
+    "humidity": 53,
+    "status": "active",
+    "mqttTopic": "events/sensor"
+  }
+}

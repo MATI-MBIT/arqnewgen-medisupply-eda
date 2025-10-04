@@ -1,0 +1,11 @@
+{
+  "id": "evt_1759551349",
+  "timestamp": "2025-10-04T04:15:49.544620285Z",
+  "type": "sensor_reading",
+  "source": "temperature_sensor_03",
+  "data": {
+    "temperature": 8.907204044242938,
+    "humidity": 54,
+    "status": "active"
+  }
+}

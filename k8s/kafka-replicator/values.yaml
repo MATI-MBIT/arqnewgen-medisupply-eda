@@ -27,6 +27,8 @@ replication:
         targetTopicName: "warehouse-order-damage"
       - sourceTopicName: "events-sensor"
         targetTopicName: "warehouse-sensor"
+      - sourceTopicName: "order-events"
+        targetTopicName: "order-events"
 
   targetToSource:
     enabled: false

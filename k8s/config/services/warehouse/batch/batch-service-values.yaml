@@ -1,0 +1,110 @@
+replicaCount: 1
+
+image:
+  repository: warehouse/batch
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Configuración del servicio Kubernetes
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+
+# ============================================================================
+# CONFIGURACIÓN ESPECÍFICA DE LA APLICACIÓN
+# ============================================================================
+# Estas variables se convierten en variables de entorno
+app:
+  config:
+    # Intervalo en segundos para generar eventos
+    KAFKA_TOPIC: "warehouse-order-damage"
+    KAFKA_BROKER_ADDRESS: "kafka-warehouse:9092"
+    KAFKA_GROUP_ID: "warehouse-batch-service"
+
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  sidecar.istio.io/inject: "true"
+
+podSecurityContext: {}
+securityContext: {}
+
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Health checks
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+  # ============================================================================
+# VARIABLES DE ENTORNO ADICIONALES
+# ============================================================================
+env:
+  # Variables comunes (incluidas automáticamente)
+  common:
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+  # Variables personalizadas adicionales (si se necesitan)
+  custom: []
+
+
+# ============================================================================
+# CARACTERÍSTICAS DESHABILITADAS PARA ESTE MICROSERVICIO
+# ============================================================================
+configMap:
+  enabled: false
+
+secret:
+  enabled: false
+
+ingress:
+  enabled: false
