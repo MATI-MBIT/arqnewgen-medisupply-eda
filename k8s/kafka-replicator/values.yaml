@@ -27,10 +27,10 @@ replication:
         targetTopicName: "warehouse-order-events"
 
   targetToSource:
-    enabled: false
-    topics: []
-  #    - sourceTopicName: "events-order-damage"
-  #      targetTopicName: "events-order-damage"
+    enabled: true
+    topics:
+      - sourceTopicName: "warehouse-batch-events"
+        targetTopicName: "batch-events"
   #    - sourceTopicName: "events-sensor"
   #      targetTopicName: "events-sensor"
 
