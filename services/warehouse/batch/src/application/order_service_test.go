@@ -11,7 +11,8 @@ import (
 func TestOrderService_HandleOrderEvent(t *testing.T) {
 	// Setup dependencies
 	repo := drivenadapters.NewBatchMemoryRepository()
-	batchService := NewBatchService(repo)
+	mockPublisher := domain.NewMockBatchEventPublisher()
+	batchService := NewBatchService(repo, mockPublisher)
 	service := NewOrderService(batchService)
 
 	// Test event JSON from the user's example
@@ -128,7 +129,8 @@ func TestOrderEvent_GetWarehouseAction(t *testing.T) {
 func TestOrderService_ProcessDamage_CreatesBatchWhenNotExists(t *testing.T) {
 	// Setup dependencies
 	repo := drivenadapters.NewBatchMemoryRepository()
-	batchService := NewBatchService(repo)
+	mockPublisher := domain.NewMockBatchEventPublisher()
+	batchService := NewBatchService(repo, mockPublisher)
 	service := NewOrderService(batchService)
 
 	tests := []struct {
@@ -220,7 +222,8 @@ func TestOrderService_ProcessDamage_CreatesBatchWhenNotExists(t *testing.T) {
 func TestOrderService_ProcessDamage_UpdatesExistingBatch(t *testing.T) {
 	// Setup dependencies
 	repo := drivenadapters.NewBatchMemoryRepository()
-	batchService := NewBatchService(repo)
+	mockPublisher := domain.NewMockBatchEventPublisher()
+	batchService := NewBatchService(repo, mockPublisher)
 	service := NewOrderService(batchService)
 
 	// Create an order in a batch first

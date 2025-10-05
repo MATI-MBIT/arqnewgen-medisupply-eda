@@ -10,13 +10,15 @@ import (
 
 // BatchService handles business logic for batch operations
 type BatchService struct {
-	batchRepo domain.BatchRepository
+	batchRepo      domain.BatchRepository
+	eventPublisher domain.BatchEventPublisher
 }
 
 // NewBatchService creates a new BatchService
-func NewBatchService(batchRepo domain.BatchRepository) *BatchService {
+func NewBatchService(batchRepo domain.BatchRepository, eventPublisher domain.BatchEventPublisher) *BatchService {
 	return &BatchService{
-		batchRepo: batchRepo,
+		batchRepo:      batchRepo,
+		eventPublisher: eventPublisher,
 	}
 }
 
@@ -27,10 +29,12 @@ func (s *BatchService) AddOrderToBatch(orderID, productID string, quantity int, 
 
 	// Try to find an existing pending batch for this product
 	batch, err := s.batchRepo.FindPendingBatchForProduct(productID)
+	isNewBatch := false
 	if err != nil {
 		// No pending batch found, create a new one
 		batchID := s.generateBatchID(productID)
 		batch = domain.NewBatch(batchID, productID)
+		isNewBatch = true
 		log.Printf("Created new batch %s for product %s", batchID, productID)
 	} else {
 		log.Printf("Found existing pending batch %s for product %s", batch.ID, productID)
@@ -44,6 +48,25 @@ func (s *BatchService) AddOrderToBatch(orderID, productID string, quantity int, 
 	// Save the batch
 	if err := s.batchRepo.Save(batch); err != nil {
 		return nil, fmt.Errorf("failed to save batch: %w", err)
+	}
+
+	// Publish events
+	if isNewBatch {
+		// Publish batch created event
+		if err := s.eventPublisher.PublishBatchEvent(domain.NewBatchCreatedEvent(batch)); err != nil {
+			log.Printf("Failed to publish batch created event: %v", err)
+		}
+	}
+
+	// Get the added item for the event
+	item, err := batch.GetItemByOrderID(orderID)
+	if err != nil {
+		log.Printf("Failed to get item for event publishing: %v", err)
+	} else {
+		// Publish item added event
+		if err := s.eventPublisher.PublishBatchEvent(domain.NewBatchItemAddedEvent(batch, orderID, item)); err != nil {
+			log.Printf("Failed to publish batch item added event: %v", err)
+		}
 	}
 
 	log.Printf("Successfully added order %s to batch %s", orderID, batch.ID)
@@ -63,6 +86,11 @@ func (s *BatchService) RemoveOrderFromBatch(orderID string) error {
 	// Remove the order from the batch
 	if err := batch.RemoveItem(orderID); err != nil {
 		return fmt.Errorf("failed to remove order from batch: %w", err)
+	}
+
+	// Publish item removed event
+	if err := s.eventPublisher.PublishBatchEvent(domain.NewBatchItemRemovedEvent(batch, orderID)); err != nil {
+		log.Printf("Failed to publish batch item removed event: %v", err)
 	}
 
 	// If batch is empty, delete it; otherwise save the updated batch
@@ -101,6 +129,17 @@ func (s *BatchService) UpdateOrderStatus(orderID, status string) error {
 		return fmt.Errorf("failed to save updated batch: %w", err)
 	}
 
+	// Get the updated item for the event
+	item, err := batch.GetItemByOrderID(orderID)
+	if err != nil {
+		log.Printf("Failed to get updated item for event publishing: %v", err)
+	} else {
+		// Publish item updated event
+		if err := s.eventPublisher.PublishBatchEvent(domain.NewBatchItemUpdatedEvent(batch, orderID, item)); err != nil {
+			log.Printf("Failed to publish batch item updated event: %v", err)
+		}
+	}
+
 	log.Printf("Successfully updated order %s status to %s in batch %s", orderID, status, batch.ID)
 	return nil
 }
@@ -120,6 +159,11 @@ func (s *BatchService) ProcessBatch(batchID string) error {
 
 	if err := s.batchRepo.Save(batch); err != nil {
 		return fmt.Errorf("failed to save batch: %w", err)
+	}
+
+	// Publish processing started event
+	if err := s.eventPublisher.PublishBatchEvent(domain.NewBatchProcessingStartedEvent(batch)); err != nil {
+		log.Printf("Failed to publish batch processing started event: %v", err)
 	}
 
 	log.Printf("Successfully started processing batch %s", batchID)
@@ -143,6 +187,11 @@ func (s *BatchService) CompleteBatch(batchID string) error {
 		return fmt.Errorf("failed to save batch: %w", err)
 	}
 
+	// Publish batch completed event
+	if err := s.eventPublisher.PublishBatchEvent(domain.NewBatchCompletedEvent(batch)); err != nil {
+		log.Printf("Failed to publish batch completed event: %v", err)
+	}
+
 	log.Printf("Successfully completed batch %s", batchID)
 	return nil
 }
@@ -164,6 +213,11 @@ func (s *BatchService) CancelBatch(batchID string) error {
 		return fmt.Errorf("failed to save batch: %w", err)
 	}
 
+	// Publish batch cancelled event
+	if err := s.eventPublisher.PublishBatchEvent(domain.NewBatchCancelledEvent(batch)); err != nil {
+		log.Printf("Failed to publish batch cancelled event: %v", err)
+	}
+
 	log.Printf("Successfully cancelled batch %s", batchID)
 	return nil
 }
@@ -183,6 +237,11 @@ func (s *BatchService) MarkBatchAsDamaged(batchID string) error {
 
 	if err := s.batchRepo.Save(batch); err != nil {
 		return fmt.Errorf("failed to save batch: %w", err)
+	}
+
+	// Publish batch damaged event
+	if err := s.eventPublisher.PublishBatchEvent(domain.NewBatchDamagedEvent(batch)); err != nil {
+		log.Printf("Failed to publish batch damaged event: %v", err)
 	}
 
 	log.Printf("Successfully marked batch %s as damaged", batchID)

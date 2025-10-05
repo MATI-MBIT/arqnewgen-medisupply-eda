@@ -10,7 +10,8 @@ import (
 func TestBatchService_AddOrderToBatch(t *testing.T) {
 	// Setup
 	repo := drivenadapters.NewBatchMemoryRepository()
-	service := NewBatchService(repo)
+	mockPublisher := domain.NewMockBatchEventPublisher()
+	service := NewBatchService(repo, mockPublisher)
 
 	// Test data
 	orderID := "order-123"
@@ -59,7 +60,8 @@ func TestBatchService_AddOrderToBatch(t *testing.T) {
 func TestBatchService_AddMultipleOrdersToSameBatch(t *testing.T) {
 	// Setup
 	repo := drivenadapters.NewBatchMemoryRepository()
-	service := NewBatchService(repo)
+	mockPublisher := domain.NewMockBatchEventPublisher()
+	service := NewBatchService(repo, mockPublisher)
 
 	productID := "product-456"
 
@@ -92,7 +94,8 @@ func TestBatchService_AddMultipleOrdersToSameBatch(t *testing.T) {
 func TestBatchService_RemoveOrderFromBatch(t *testing.T) {
 	// Setup
 	repo := drivenadapters.NewBatchMemoryRepository()
-	service := NewBatchService(repo)
+	mockPublisher := domain.NewMockBatchEventPublisher()
+	service := NewBatchService(repo, mockPublisher)
 
 	// Add order to batch
 	orderID := "order-123"
@@ -118,7 +121,8 @@ func TestBatchService_RemoveOrderFromBatch(t *testing.T) {
 func TestBatchService_UpdateOrderStatus(t *testing.T) {
 	// Setup
 	repo := drivenadapters.NewBatchMemoryRepository()
-	service := NewBatchService(repo)
+	mockPublisher := domain.NewMockBatchEventPublisher()
+	service := NewBatchService(repo, mockPublisher)
 
 	// Add order to batch
 	orderID := "order-123"
@@ -154,7 +158,8 @@ func TestBatchService_UpdateOrderStatus(t *testing.T) {
 func TestBatchService_ProcessBatch(t *testing.T) {
 	// Setup
 	repo := drivenadapters.NewBatchMemoryRepository()
-	service := NewBatchService(repo)
+	mockPublisher := domain.NewMockBatchEventPublisher()
+	service := NewBatchService(repo, mockPublisher)
 
 	// Add order to batch
 	batch, err := service.AddOrderToBatch("order-123", "product-456", 10, "allocated")
@@ -182,7 +187,8 @@ func TestBatchService_ProcessBatch(t *testing.T) {
 func TestBatchService_CompleteBatch(t *testing.T) {
 	// Setup
 	repo := drivenadapters.NewBatchMemoryRepository()
-	service := NewBatchService(repo)
+	mockPublisher := domain.NewMockBatchEventPublisher()
+	service := NewBatchService(repo, mockPublisher)
 
 	// Add order and start processing
 	batch, err := service.AddOrderToBatch("order-123", "product-456", 10, "allocated")

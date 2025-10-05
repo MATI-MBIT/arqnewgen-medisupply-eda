@@ -25,18 +25,22 @@ func main() {
 
 	// Load configuration from environment variables
 	cfg := config.LoadConfig()
-	log.Printf("Configuration - Order Events Topic: %s, Group ID: %s, Broker: %s, HTTP Port: %s", 
-		cfg.Kafka.OrderEventsTopic, cfg.Kafka.GroupID, cfg.Kafka.BrokerAddress, cfg.HTTP.Port)
+	log.Printf("Configuration - Order Events Topic: %s, Batch Events Topic: %s, Group ID: %s, Broker: %s, HTTP Port: %s", 
+		cfg.Kafka.OrderEventsTopic, cfg.Kafka.BatchEventsTopic, cfg.Kafka.GroupID, cfg.Kafka.BrokerAddress, cfg.HTTP.Port)
 
 	// Create a context that can be cancelled
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize driven adapters (repositories)
+	// Initialize driven adapters (repositories and event publishers)
 	batchRepo := drivenadapters.NewBatchMemoryRepository()
+	batchEventPublisher := drivenadapters.NewBatchEventPublisherAdapter(
+		cfg.Kafka.BrokerAddress,
+		cfg.Kafka.BatchEventsTopic,
+	)
 	
 	// Initialize application layer (business logic)
-	batchService := application.NewBatchService(batchRepo)
+	batchService := application.NewBatchService(batchRepo, batchEventPublisher)
 	orderService := application.NewOrderService(batchService)
 
 	// Initialize driving adapters
@@ -58,13 +62,13 @@ func main() {
 	go apiServiceAdapter.Start(ctx)
 
 	// Set up graceful shutdown
-	setupGracefulShutdown(cancel)
+	setupGracefulShutdown(cancel, batchEventPublisher)
 
 	log.Println("Application shut down gracefully.")
 }
 
 // setupGracefulShutdown handles OS signals for graceful shutdown
-func setupGracefulShutdown(cancel context.CancelFunc) {
+func setupGracefulShutdown(cancel context.CancelFunc, batchEventPublisher *drivenadapters.BatchEventPublisherAdapter) {
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -74,6 +78,11 @@ func setupGracefulShutdown(cancel context.CancelFunc) {
 
 	// Cancel the context to signal goroutines to stop
 	cancel()
+
+	// Close the event publisher
+	if err := batchEventPublisher.Close(); err != nil {
+		log.Printf("Error closing batch event publisher: %v", err)
+	}
 
 	// Give goroutines a moment to clean up
 	time.Sleep(2 * time.Second)
