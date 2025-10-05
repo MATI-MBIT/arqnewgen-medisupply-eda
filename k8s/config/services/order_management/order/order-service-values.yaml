@@ -56,7 +56,7 @@ resources:
     memory: 128Mi
 
 autoscaling:
-  enabled: false
+  enabled: false  # Deshabilitado porque usamos KEDA para escalado basado en eventos
   minReplicas: 1
   maxReplicas: 3
   targetCPUUtilizationPercentage: 80

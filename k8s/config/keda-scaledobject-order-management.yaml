@@ -1,0 +1,91 @@
+# ============================================================================
+# KEDA SCALEDOBJECT PARA ORDER MANAGEMENT SERVICE
+# ============================================================================
+# Este archivo define la configuración de KEDA para escalar automáticamente
+# el servicio order_management basado en el número de mensajes en RabbitMQ
+#
+# REQUISITOS:
+# - KEDA debe estar instalado en el cluster
+# - RabbitMQ debe estar configurado y accesible
+# - El servicio order_management debe estar desplegado
+#
+# INSTALACIÓN:
+# kubectl apply -f k8s/config/keda-scaledobject-order-management.yaml
+#
+# VERIFICACIÓN:
+# kubectl get scaledobjects -n medisupply
+# kubectl describe scaledobject order-management-scaledobject -n medisupply
+# ============================================================================
+
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: order-management-scaledobject
+  namespace: medisupply
+  labels:
+    app: order-management
+    component: autoscaling
+    managed-by: keda
+  annotations:
+    description: "KEDA ScaledObject para order_management basado en RabbitMQ queue depth"
+    version: "1.0.0"
+spec:
+  # Referencia al deployment que se va a escalar
+  scaleTargetRef:
+    name: order-management-order
+    apiVersion: apps/v1
+    kind: Deployment
+  
+  # Configuración de réplicas
+  minReplicaCount: 1
+  maxReplicaCount: 3
+  
+  # Configuración de polling y cooldown
+  pollingInterval: 30  # Verificar cada 30 segundos
+  cooldownPeriod: 300  # 5 minutos de cooldown antes de reducir réplicas
+  idleReplicaCount: 1  # Mantener al menos 1 réplica idle
+  
+  # Configuración de los triggers (disparadores)
+  triggers:
+  - type: rabbitmq
+    metadata:
+      # Configuración de conexión a RabbitMQ
+      host: rabbitmq.mediorder.svc.cluster.local
+      queueName: order-damage-queue
+      queueLength: "10"  # Umbral: escalar cuando hay más de 10 mensajes
+      vhostName: "/"
+      # Configuración de autenticación
+      protocol: "amqp"
+      username: "user"
+      # Configuración adicional
+      mode: "QueueLength"  # Modo de escalado basado en longitud de cola
+      value: "10"  # Valor del umbral (mensajes en cola)
+    # Referencia a la TriggerAuthentication
+    authenticationRef:
+      name: rabbitmq-auth
+      
+  # Configuración de fallback en caso de error
+  fallback:
+    failureThreshold: 3
+    replicas: 1
+    
+  # Configuración de comportamiento de escalado
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300  # 5 minutos de estabilización para scale down
+          policies:
+          - type: Percent
+            value: 50  # Reducir máximo 50% de las réplicas por vez
+            periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 60   # 1 minuto de estabilización para scale up
+          policies:
+          - type: Percent
+            value: 100  # Aumentar máximo 100% de las réplicas por vez
+            periodSeconds: 60
+          - type: Pods
+            value: 2    # Máximo 2 pods adicionales por vez
+            periodSeconds: 60
+          selectPolicy: Max  # Usar la política más permisiva

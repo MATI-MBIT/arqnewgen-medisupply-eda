@@ -1,0 +1,40 @@
+# ============================================================================
+# KEDA TRIGGER AUTHENTICATION PARA RABBITMQ
+# ============================================================================
+# Este archivo define la configuración de autenticación de KEDA para RabbitMQ
+# Permite a KEDA conectarse a RabbitMQ de forma segura usando secrets
+#
+# REQUISITOS:
+# - El secret 'rabbitmq' debe existir en el namespace medisupply
+# - KEDA debe tener permisos para leer secrets
+#
+# INSTALACIÓN:
+# kubectl apply -f k8s/config/keda-trigger-auth-rabbitmq.yaml
+#
+# VERIFICACIÓN:
+# kubectl get triggerauthentications -n medisupply
+# kubectl describe triggerauthentication rabbitmq-auth -n medisupply
+# ============================================================================
+
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: rabbitmq-auth
+  namespace: medisupply
+  labels:
+    app: order-management
+    component: authentication
+    managed-by: keda
+  annotations:
+    description: "TriggerAuthentication para KEDA con RabbitMQ"
+    version: "1.0.0"
+spec:
+  # Configuración de autenticación por secret
+  secretTargetRef:
+  - parameter: password
+    name: rabbitmq
+    key: rabbitmq-password
+    
+  # Configuración adicional de autenticación
+  podIdentity:
+    provider: none  # No usar pod identity, usar secret tradicional
