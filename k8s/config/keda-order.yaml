@@ -36,7 +36,7 @@ spec:
       bootstrapServers: kafka.medisupply.svc.cluster.local:9092
       consumerGroup: mqtt-order-event-client-group
       topic: events-order
-      lagThreshold: '1'
+      lagThreshold: '0'
       offsetResetPolicy: latest
       allowIdleConsumers: 'false'
  
