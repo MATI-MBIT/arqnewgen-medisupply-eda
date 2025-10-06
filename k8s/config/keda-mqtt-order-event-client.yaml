@@ -1,0 +1,79 @@
+# ============================================================================
+# KEDA SCALEDOBJECT PARA MQTT ORDER EVENT CLIENT
+# ============================================================================
+# Esta configuración implementa KEDA para escalar automáticamente
+# el servicio mqtt-order-event-client basado en mensajes MQTT
+#
+# CARACTERÍSTICAS:
+# - Escala basado en número de mensajes en el topic MQTT
+# - Usa la configuración actual de EMQX sin cambios
+# - Configuración completamente independiente
+#
+# INSTALACIÓN:
+# kubectl apply -f k8s/config/keda-mqtt-order-event-client.yaml
+#
+# DESINSTALACIÓN:
+# kubectl delete -f k8s/config/keda-mqtt-order-event-client.yaml
+# ============================================================================
+
+---
+# TriggerAuthentication para MQTT (EMQX)
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: mqtt-order-event-auth
+  namespace: medisupply
+  labels:
+    app.kubernetes.io/name: keda-mqtt-auth
+    app.kubernetes.io/component: authentication
+spec:
+  # Configuración de autenticación para MQTT
+  # Usando credenciales por defecto de EMQX
+  # (En un entorno de producción, usar secrets)
+  secretTargetRef: []
+  # Las credenciales se pasan directamente en el metadata del trigger
+
+---
+# ScaledObject para mqtt-order-event-client
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: mqtt-order-event-client-scaler
+  namespace: medisupply
+  labels:
+    app.kubernetes.io/name: mqtt-order-event-client
+    app.kubernetes.io/component: autoscaler
+  annotations:
+    description: "KEDA ScaledObject para mqtt-order-event-client basado en mensajes MQTT"
+spec:
+  # Referencia al deployment existente
+  scaleTargetRef:
+    name: mqtt-order-event-client
+    
+  # Configuración de escalado
+  minReplicaCount: 1
+  maxReplicaCount: 3
+  
+  # Configuración de polling y cooldown
+  pollingInterval: 30  # Verificar cada 30 segundos
+  cooldownPeriod: 300  # 5 minutos de cooldown
+  
+  # Trigger basado en MQTT
+  triggers:
+  - type: mqtt
+    metadata:
+      # Configuración de conexión MQTT
+      brokerAddress: "emqx.medilogistic.svc.cluster.local:1883"
+      topic: "events/sensor"
+      # Configuración de autenticación
+      username: "admin"
+      password: "public"
+      # Configuración de escalado
+      messageCount: "10"  # Escalar cuando hay más de 10 mensajes pendientes
+      # Configuración adicional
+      protocol: "tcp"
+      clientId: "keda-scaler-mqtt-order-event"
+      # Configuración de QoS (Quality of Service)
+      qos: "1"  # At least once delivery
+      # Configuración de limpieza de sesión
+      cleanSession: "true"

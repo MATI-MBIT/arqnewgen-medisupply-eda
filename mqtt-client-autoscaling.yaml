@@ -1,0 +1,52 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: mqtt-order-event-client-scaler
+  namespace: medilogistic
+  labels:
+    app: mqtt-order-event-client
+    component: autoscaler
+spec:
+  # Referencia al deployment del mqtt-order-event-client
+  scaleTargetRef:
+    name: mqtt-order-event-client
+    
+  # Configuración de escalado
+  minReplicaCount: 1
+  maxReplicaCount: 5
+  
+  # Configuración de polling
+  pollingInterval: 30  # Verificar cada 30 segundos
+  cooldownPeriod: 300  # 5 minutos de cooldown
+  
+  # Trigger basado en CPU (para simular carga)
+  triggers:
+  - type: cpu
+    metadata:
+      type: Utilization
+      value: "70"  # Escalar cuando CPU > 70%
+---
+# Alternativa: Trigger basado en memoria
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: mqtt-order-event-client-memory-scaler
+  namespace: medilogistic
+  labels:
+    app: mqtt-order-event-client
+    component: memory-autoscaler
+spec:
+  scaleTargetRef:
+    name: mqtt-order-event-client
+    
+  minReplicaCount: 1
+  maxReplicaCount: 4
+  
+  pollingInterval: 30
+  cooldownPeriod: 180  # 3 minutos de cooldown
+  
+  triggers:
+  - type: memory
+    metadata:
+      type: Utilization
+      value: "80"  # Escalar cuando memoria > 80%
