@@ -15,55 +15,28 @@
 # DESINSTALACIÓN (si no funciona):
 # kubectl delete -f k8s/config/keda-order-management-minimal.yaml
 # ============================================================================
-
----
-# TriggerAuthentication para RabbitMQ (usando configuración existente)
-apiVersion: keda.sh/v1alpha1
-kind: TriggerAuthentication
-metadata:
-  name: rabbitmq-order-auth
-  namespace: medisupply
-  labels:
-    app.kubernetes.io/name: keda-rabbitmq-auth
-    app.kubernetes.io/component: authentication
-spec:
-  secretTargetRef:
-  - parameter: password
-    name: rabbitmq
-    key: rabbitmq-password
-
----
-# ScaledObject para order_management (configuración mínima)
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: order-management-scaler
+  name: mqtt-order-event-client-scaler
   namespace: medisupply
   labels:
-    app.kubernetes.io/name: order-management
-    app.kubernetes.io/component: autoscaler
+    app: mqtt-order-event-client
+    component: autoscaler
 spec:
-  # Referencia al deployment existente (NO LO MODIFICA)
   scaleTargetRef:
-    name: order-management-order
-    
-  # Configuración conservadora de escalado
+    name: mqtt-order-event-client
   minReplicaCount: 1
   maxReplicaCount: 3
-  
-  # Polling conservador (no agresivo)
-  pollingInterval: 60  # Verificar cada minuto
-  cooldownPeriod: 600  # 10 minutos de cooldown
-  
-  # Trigger basado en RabbitMQ (usando configuración existente)
+  pollingInterval: 60
+  cooldownPeriod: 300
   triggers:
-  - type: rabbitmq
+  - type: kafka
     metadata:
-      host: rabbitmq.mediorder.svc.cluster.local
-      queueName: order-damage-queue
-      queueLength: "10"
-      vhostName: "/"
-      protocol: "amqp"
-      username: "user"
-    authenticationRef:
-      name: rabbitmq-order-auth
+      bootstrapServers: kafka.medisupply.svc.cluster.local:9092
+      consumerGroup: mqtt-order-event-client-group
+      topic: events-order
+      lagThreshold: '1'
+      offsetResetPolicy: latest
+      allowIdleConsumers: 'false'
+ 
