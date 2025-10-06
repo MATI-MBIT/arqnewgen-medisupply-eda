@@ -48,7 +48,7 @@ metadata:
 spec:
   # Referencia al deployment existente
   scaleTargetRef:
-    name: mqtt-order-event-client
+    name: mqtt-order-event-client-microservice
     
   # Configuración de escalado
   minReplicaCount: 1
